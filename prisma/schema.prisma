@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Vendor {
+  id                 String             @id @default(cuid())
+  shop               String
+  name               String
+  email              String
+  passwordHash       String
+  status             String             @default("pending") // pending | approved | rejected | suspended
+  commissionPercent  Float              @default(10)
+  shopifyCollectionId String?
+  bio                String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sessions           VendorSession[]
+  attributions       OrderAttribution[]
+  payouts            VendorPayout[]
+
+  @@unique([shop, email])
+  @@index([shop, status])
+}
+
+model VendorSession {
+  id        String   @id @default(cuid())
+  vendorId  String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+}
+
+model OrderAttribution {
+  id               String   @id @default(cuid())
+  shop             String
+  shopifyOrderId   String
+  shopifyOrderName String?
+  vendorId         String
+  lineItemIds      String   // JSON array of line item IDs
+  lineItemsJson    String   // JSON details for display
+  subtotal         Float
+  commissionAmount Float
+  currency         String   @default("USD")
+  createdAt        DateTime @default(now())
+  vendor           Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, shopifyOrderId, vendorId])
+  @@index([shop, vendorId])
+  @@index([shop, shopifyOrderId])
+}
+
+model VendorPayout {
+  id        String   @id @default(cuid())
+  shop      String
+  vendorId  String
+  amount    Float
+  currency  String   @default("USD")
+  note      String?
+  reference String?
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([shop, vendorId])
+  @@index([shop, paidAt])
+}
+
+model AppSettings {
+  id                       String   @id @default(cuid())
+  shop                     String   @unique
+  defaultCommissionPercent Float    @default(10)
+  requireProductApproval   Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}

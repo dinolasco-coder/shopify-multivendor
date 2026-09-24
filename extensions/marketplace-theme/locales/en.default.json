@@ -1,0 +1,9 @@
+{
+  "name": "Marketplace",
+  "sold-by-vendor": {
+    "name": "Sold by vendor",
+    "settings": {
+      "label": "Label"
+    }
+  }
+}

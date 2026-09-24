@@ -1,0 +1,37 @@
+{% comment %}
+  Shows which marketplace vendor sells this product.
+  Uses the native Shopify product.vendor field (set by the app on create)
+  and optionally the marketplace.vendor_id metafield.
+{% endcomment %}
+{% assign marketplace_vendor_id = product.metafields.marketplace.vendor_id.value %}
+{% if product.vendor != blank or marketplace_vendor_id != blank %}
+  <div class="mv-sold-by" {{ block.shopify_attributes }}>
+    <p class="mv-sold-by__label">{{ block.settings.label }}</p>
+    <p class="mv-sold-by__name">
+      {% if product.vendor != blank %}
+        {{ product.vendor }}
+      {% else %}
+        Marketplace seller
+      {% endif %}
+    </p>
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Sold by vendor",
+  "target": "section",
+  "stylesheet": "sold-by.css",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "text",
+      "id": "label",
+      "label": "Label",
+      "default": "Sold by"
+    }
+  ]
+}
+{% endschema %}

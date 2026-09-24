@@ -1,0 +1,8 @@
+api_version = "2025-10"
+
+[[extensions]]
+type = "theme"
+name = "Marketplace"
+handle = "marketplace-theme"
+
+uid = "7bdf7383-893d-c7bb-9da4-425a217cf81888d5dbd9"

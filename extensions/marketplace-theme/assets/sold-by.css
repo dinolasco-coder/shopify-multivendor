@@ -1,0 +1,21 @@
+.mv-sold-by {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid #1f4d3a;
+  background: #f3f7f5;
+}
+
+.mv-sold-by__label {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5a6b63;
+}
+
+.mv-sold-by__name {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1c2421;
+}

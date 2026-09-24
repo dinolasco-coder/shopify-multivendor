@@ -1,0 +1,12 @@
+.cache
+build
+node_modules
+.dev.vars
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-journal
+.shopify
+.git
+
