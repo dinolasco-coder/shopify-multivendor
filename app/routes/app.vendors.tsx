@@ -16,6 +16,10 @@ import {
 import { getOrCreateSettings } from "../models/settings.server";
 import { hashPassword } from "../services/password.server";
 import { ensureVendorCollection } from "../services/collections.server";
+import {
+  sendVendorApprovedEmail,
+  sendVendorInviteEmail,
+} from "../services/email.server";
 import type { VendorStatus } from "../constants";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -59,7 +63,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status: "pending",
     });
 
-    return { ok: true, message: "Vendor invited. They can log in once approved." };
+    const emailResult = await sendVendorInviteEmail({
+      to: email,
+      vendorName: name,
+      shop: session.shop,
+      temporaryPassword: password,
+    });
+
+    if (!emailResult.sent) {
+      return {
+        ok: true,
+        message: `Vendor created, but email was not sent: ${emailResult.error || "unknown error"}. Share the login link and temporary password manually.`,
+      };
+    }
+
+    return {
+      ok: true,
+      message: "Vendor invited and email sent. They can log in once approved.",
+    };
   }
 
   if (intent === "setStatus") {
@@ -79,6 +100,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status,
       shopifyCollectionId: shopifyCollectionId ?? undefined,
     });
+
+    if (status === "approved") {
+      const mail = await sendVendorApprovedEmail({
+        to: vendor.email,
+        vendorName: vendor.name,
+        shop: session.shop,
+      });
+      if (!mail.sent) {
+        return {
+          ok: true,
+          message: `Vendor marked as approved, but email was not sent: ${mail.error || "unknown error"}.`,
+        };
+      }
+      return {
+        ok: true,
+        message: "Vendor approved and notification email sent.",
+      };
+    }
 
     return { ok: true, message: `Vendor marked as ${status}.` };
   }
@@ -125,7 +164,7 @@ export default function VendorsPage() {
               label="Temporary password"
               name="password"
               required
-              details="Minimum 8 characters. Share securely with the vendor."
+              details="Minimum 8 characters. This is emailed to the vendor (and shown only if email fails)."
             />
             <s-number-field
               label="Commission %"

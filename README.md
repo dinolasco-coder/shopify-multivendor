@@ -52,6 +52,18 @@ Vendors open `{APP_URL}/vendor/register` (or `/vendor/login`) and enter the shop
 
 New vendors start as **pending**. Approve them under **Vendors** in the embedded admin.
 
+### Invite emails (Resend)
+
+1. Create an API key at [resend.com/api-keys](https://resend.com/api-keys).
+2. Set on Railway (and local `.env`):
+   - `RESEND_API_KEY`
+   - `RESEND_FROM_EMAIL` (optional; default test sender `onboarding@resend.dev`)
+   - `SHOPIFY_APP_URL` (already set on Railway)
+3. When you **Invite vendor**, they get an email with login link + temporary password.
+4. When you **Approve** a vendor, they get an approval email.
+
+For production, verify your own domain in Resend and set `RESEND_FROM_EMAIL` to something like `Inabel <noreply@yourdomain.com>`.
+
 ## How attribution works
 
 1. Vendor products get metafield `marketplace.vendor_id` = vendor DB id.
