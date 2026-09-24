@@ -46,6 +46,7 @@ export async function updateVendor(
     commissionPercent?: number;
     shopifyCollectionId?: string | null;
     bio?: string | null;
+    passwordHash?: string;
   },
 ) {
   return prisma.vendor.update({ where: { id }, data });

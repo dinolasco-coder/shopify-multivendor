@@ -49,7 +49,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const existing = await getVendorByEmail(session.shop, email);
     if (existing) {
-      return { error: "A vendor with that email already exists." };
+      return {
+        error:
+          "A vendor with that email already exists. Use “Resend invite email” on their card, or Delete them first then invite again.",
+      };
     }
 
     const settings = await getOrCreateSettings(session.shop);
@@ -147,6 +150,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: true, message: `${vendor.name} was deleted.` };
   }
 
+  if (intent === "resendInvite") {
+    const vendorId = String(form.get("vendorId") || "");
+    const vendor = await getVendorById(vendorId);
+    if (!vendor || vendor.shop !== session.shop) {
+      return { error: "Vendor not found." };
+    }
+
+    const temporaryPassword = `Tmp-${Math.random().toString(36).slice(2, 8)}A1`;
+    await updateVendor(vendorId, {
+      passwordHash: hashPassword(temporaryPassword),
+    });
+
+    const emailResult = await sendVendorInviteEmail({
+      to: vendor.email,
+      vendorName: vendor.name,
+      shop: session.shop,
+      temporaryPassword,
+    });
+
+    if (!emailResult.sent) {
+      return {
+        ok: true,
+        message: `Invite email failed: ${emailResult.error || "unknown error"}. Temporary password for ${vendor.email}: ${temporaryPassword}`,
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Invite email resent to ${vendor.email}.`,
+    };
+  }
+
   return { error: "Unknown action." };
 };
 
@@ -227,6 +262,11 @@ export default function VendorsPage() {
                   </s-paragraph>
 
                   <s-stack direction="inline" gap="base">
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="resendInvite" />
+                      <input type="hidden" name="vendorId" value={vendor.id} />
+                      <s-button type="submit">Resend invite email</s-button>
+                    </Form>
                     {vendor.status !== "approved" && (
                       <Form method="post">
                         <input type="hidden" name="intent" value="setStatus" />
