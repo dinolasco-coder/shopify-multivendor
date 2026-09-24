@@ -2,7 +2,7 @@
 
 client_id = "3410e65ba4da377d8a3ffa0fe973caab"
 name = "Multi-vendor Inabel"
-application_url = "https://example.com"
+application_url = "https://shopify-multivendor-production.up.railway.app"
 embedded = true
 
 [webhooks]
@@ -30,11 +30,11 @@ scopes = "read_inventory,read_locations,read_orders,read_products,read_publicati
 
 [auth]
 redirect_urls = [
-  "https://example.com/auth/callback",
-  "https://example.com/auth/shopify/callback",
-  "https://example.com/api/auth/callback"
+  "https://shopify-multivendor-production.up.railway.app/auth/callback",
+  "https://shopify-multivendor-production.up.railway.app/auth/shopify/callback",
+  "https://shopify-multivendor-production.up.railway.app/api/auth/callback"
 ]
 
 [build]
-include_config_on_deploy = true
-automatically_update_urls_on_dev = true
+# Keep false so `npm run dev` does NOT overwrite Railway URLs with Cloudflare tunnels
+automatically_update_urls_on_dev = false

@@ -8,6 +8,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
   createVendor,
+  deleteVendor,
   listVendors,
   updateVendor,
   getVendorByEmail,
@@ -136,6 +137,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: true, message: "Commission updated." };
   }
 
+  if (intent === "delete") {
+    const vendorId = String(form.get("vendorId") || "");
+    const vendor = await getVendorById(vendorId);
+    if (!vendor || vendor.shop !== session.shop) {
+      return { error: "Vendor not found." };
+    }
+    await deleteVendor(vendorId);
+    return { ok: true, message: `${vendor.name} was deleted.` };
+  }
+
   return { error: "Unknown action." };
 };
 
@@ -254,6 +265,24 @@ export default function VendorsPage() {
                         </s-button>
                       </Form>
                     )}
+                    <Form
+                      method="post"
+                      onSubmit={(event) => {
+                        if (
+                          !confirm(
+                            `Delete ${vendor.name}? Their login, sales records, and payouts for this vendor will be removed. This cannot be undone.`,
+                          )
+                        ) {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
+                      <input type="hidden" name="intent" value="delete" />
+                      <input type="hidden" name="vendorId" value={vendor.id} />
+                      <s-button type="submit" tone="critical">
+                        Delete
+                      </s-button>
+                    </Form>
                   </s-stack>
 
                   <Form method="post">

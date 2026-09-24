@@ -51,6 +51,11 @@ export async function updateVendor(
   return prisma.vendor.update({ where: { id }, data });
 }
 
+export async function deleteVendor(id: string) {
+  // Sessions, attributions, and payouts cascade via Prisma relations.
+  return prisma.vendor.delete({ where: { id } });
+}
+
 export async function countVendorsByStatus(shop: string) {
   const groups = await prisma.vendor.groupBy({
     by: ["status"],
