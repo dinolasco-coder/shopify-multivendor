@@ -1,0 +1,15 @@
+---
+description: App versioning — v1 stable restore, v2 experimental changes
+alwaysApply: true
+---
+
+# Version restore convention
+
+- **v1** = stable tagged release (`git tag v1`). Current production baseline.
+- **v2** = newer work on `main` after `v1` (features, UI experiments).
+- When the user says **restore**, **restore it**, or **back to version 1**:
+  1. Restore all tracked files from the `v1` tag (do not force-push rewrite history unless they explicitly ask).
+  2. Prefer: `git checkout v1 -- .` then commit `Restore to version 1.` and push `main` so Railway redeploys v1.
+  3. Confirm restore succeeded with `git status` / brief note to the user.
+- When the user asks for **version 2** / **v2**: implement the requested changes on `main` (forward from current code). Do not delete the `v1` tag.
+- After a major approved v2 ships and they want a new restore point, tag it as `v2` only when they ask to lock it.
