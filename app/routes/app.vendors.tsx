@@ -4,6 +4,7 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -20,6 +21,37 @@ import { hashPassword } from "../services/password.server";
 import { ensureVendorCollection } from "../services/collections.server";
 import type { VendorStatus } from "../constants";
 
+function appBaseUrl(request: Request) {
+  return (
+    process.env.SHOPIFY_APP_URL?.replace(/\/$/, "") ||
+    new URL(request.url).origin
+  );
+}
+
+function buildInviteKit(input: {
+  name: string;
+  email: string;
+  password: string;
+  portalUrl: string;
+  shopLabel: string;
+}) {
+  return [
+    `You're invited to sell on ${input.shopLabel}.`,
+    ``,
+    `Login link: ${input.portalUrl}`,
+    `Email: ${input.email}`,
+    `Temporary password: ${input.password}`,
+    ``,
+    `Steps:`,
+    `1. Open the login link`,
+    `2. Sign in with the email and temporary password`,
+    `3. Wait until the store admin Approves your account`,
+    `4. After approval, you can add products`,
+    ``,
+    `Hi ${input.name} — welcome!`,
+  ].join("\n");
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const vendors = await listVendors(session.shop);
@@ -28,7 +60,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const refreshed = await listVendors(session.shop);
   const settings = await getOrCreateSettings(session.shop);
-  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+  const appUrl = appBaseUrl(request);
   return { vendors: refreshed, settings, appUrl };
 };
 
@@ -36,6 +68,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
+  const baseUrl = appBaseUrl(request);
+  const shopLabel = session.shop.replace(/\.myshopify\.com$/i, "");
 
   if (intent === "invite") {
     const name = String(form.get("name") || "").trim();
@@ -58,7 +92,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const settings = await getOrCreateSettings(session.shop);
-    await createVendor({
+    const vendor = await createVendor({
       shop: session.shop,
       name,
       email,
@@ -69,9 +103,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status: "pending",
     });
 
+    const slug = await ensureVendorSlug(vendor);
+    const portalUrl = `${baseUrl}/vendor/u/${slug}`;
+    const inviteKit = buildInviteKit({
+      name,
+      email,
+      password,
+      portalUrl,
+      shopLabel,
+    });
+
     return {
       ok: true,
-      message: `Vendor invited. Share ${new URL(request.url).origin}/vendor/login and the temporary password with ${email}.`,
+      message: `Vendor invited. Copy the invite message below and send it to ${email}.`,
+      inviteKit,
     };
   }
 
@@ -132,14 +177,88 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       passwordHash: hashPassword(temporaryPassword),
     });
 
+    const slug = await ensureVendorSlug(vendor);
+    const portalUrl = `${baseUrl}/vendor/u/${slug}`;
+    const inviteKit = buildInviteKit({
+      name: vendor.name,
+      email: vendor.email,
+      password: temporaryPassword,
+      portalUrl,
+      shopLabel,
+    });
+
     return {
       ok: true,
-      message: `Password reset for ${vendor.email}. Temporary password: ${temporaryPassword}`,
+      message: `Password reset for ${vendor.email}. Copy the message below and send it to them.`,
+      inviteKit,
     };
   }
 
   return { error: "Unknown action." };
 };
+
+function InviteKitBox({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older webviews
+      const area = document.getElementById(
+        "vendor-invite-kit",
+      ) as HTMLTextAreaElement | null;
+      area?.select();
+      document.execCommand("copy");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  return (
+    <s-box padding="base" borderWidth="base" borderRadius="base">
+      <s-stack direction="block" gap="base">
+        <s-heading>Invite message (copy &amp; send)</s-heading>
+        <s-paragraph>
+          Paste this into Messenger, SMS, or email. No email service needed.
+        </s-paragraph>
+        <textarea
+          id="vendor-invite-kit"
+          readOnly
+          value={text}
+          rows={12}
+          style={{
+            width: "100%",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: "13px",
+            padding: "12px",
+            borderRadius: "8px",
+            border: "1px solid #c9cccf",
+            resize: "vertical",
+          }}
+        />
+        <button
+          type="button"
+          onClick={copy}
+          style={{
+            alignSelf: "flex-start",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "none",
+            background: "#1a1a1a",
+            color: "#fff",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {copied ? "Copied!" : "Copy invite message"}
+        </button>
+      </s-stack>
+    </s-box>
+  );
+}
 
 export default function VendorsPage() {
   const { vendors, settings, appUrl } = useLoaderData<typeof loader>();
@@ -155,6 +274,11 @@ export default function VendorsPage() {
       {actionData && "message" in actionData && actionData.message && (
         <s-banner tone="success">{actionData.message}</s-banner>
       )}
+      {actionData &&
+        "inviteKit" in actionData &&
+        actionData.inviteKit && (
+          <InviteKitBox text={actionData.inviteKit} />
+        )}
 
       <s-section heading="Invite vendor">
         <Form method="post">
@@ -166,7 +290,7 @@ export default function VendorsPage() {
               label="Temporary password"
               name="password"
               required
-              details="Minimum 8 characters. Share this with the vendor manually (login link + password)."
+              details="Minimum 8 characters. After invite, copy the message and send it to the seller."
             />
             <s-number-field
               label="Commission %"
