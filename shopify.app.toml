@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "3410e65ba4da377d8a3ffa0fe973caab"
-name = "Multi-vendor Inabel"
+client_id = "304f7053acb01cb175062d922ef54e52"
+name = "Multi-vendor Inabel Main"
 application_url = "https://shopify-multivendor-production.up.railway.app"
 embedded = true
 
