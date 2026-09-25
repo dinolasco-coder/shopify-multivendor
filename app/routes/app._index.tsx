@@ -59,7 +59,7 @@ function StatCard({
       borderRadius="base"
       background={emphasize ? "subdued" : undefined}
     >
-      <s-stack direction="block" gap="small-200">
+      <s-stack direction="block" gap="small">
         <s-text>{label}</s-text>
         <s-heading>{value}</s-heading>
         <s-paragraph>{hint}</s-paragraph>
@@ -201,7 +201,7 @@ export default function Dashboard() {
           </s-stack>
 
           <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-stack direction="block" gap="small-200">
+            <s-stack direction="block" gap="small">
               <s-heading>Seller portal</s-heading>
               <s-paragraph>
                 Share this login with sellers (or use the invite kit on the
