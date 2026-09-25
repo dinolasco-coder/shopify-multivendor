@@ -54,8 +54,8 @@ export async function getVendorById(id: string) {
 }
 
 export async function getVendorBySlug(shop: string, slug: string) {
-  return prisma.vendor.findUnique({
-    where: { shop_slug: { shop, slug: slug.toLowerCase() } },
+  return prisma.vendor.findFirst({
+    where: { shop, slug: slug.toLowerCase() },
   });
 }
 

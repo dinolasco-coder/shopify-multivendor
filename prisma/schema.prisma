@@ -34,7 +34,7 @@ model Vendor {
   id                 String             @id @default(cuid())
   shop               String
   name               String
-  slug               String             @default("")
+  slug               String             @default(cuid())
   email              String
   passwordHash       String
   status             String             @default("pending") // pending | approved | rejected | suspended
@@ -48,7 +48,7 @@ model Vendor {
   payouts            VendorPayout[]
 
   @@unique([shop, email])
-  @@unique([shop, slug])
+  @@index([shop, slug])
   @@index([shop, status])
 }
 

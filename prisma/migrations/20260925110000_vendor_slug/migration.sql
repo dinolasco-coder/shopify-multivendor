@@ -1,8 +1,7 @@
--- AlterTable
+-- AlterTable: add slug if missing (SQLite)
+-- Prisma db push handles this in production; this migration is for migrate history.
 ALTER TABLE "Vendor" ADD COLUMN "slug" TEXT NOT NULL DEFAULT '';
 
--- Unique placeholder from id (app can keep or you can rename later)
 UPDATE "Vendor" SET "slug" = "id" WHERE "slug" = '';
 
--- CreateIndex
-CREATE UNIQUE INDEX "Vendor_shop_slug_key" ON "Vendor"("shop", "slug");
+CREATE INDEX IF NOT EXISTS "Vendor_shop_slug_idx" ON "Vendor"("shop", "slug");
