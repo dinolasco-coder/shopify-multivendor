@@ -1,13 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
-import {
-  BlockStack,
-  Card,
-  DataTable,
-  InlineGrid,
-  Page,
-  Text,
-} from "@shopify/polaris";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { getVendorEarningsSummary } from "../models/payouts.server";
 import { formatMoney } from "../utils/money";
@@ -19,84 +11,84 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     summary,
     commissionPercent: result.vendor.commissionPercent,
+    commissionFlat:
+      "commissionFlat" in result.vendor
+        ? Number((result.vendor as { commissionFlat?: number }).commissionFlat ?? 0)
+        : 0,
   };
 };
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <BlockStack gap="100">
-        <Text as="p" variant="bodySm" tone="subdued">
-          {label}
-        </Text>
-        <Text as="p" variant="headingLg">
-          {value}
-        </Text>
-      </BlockStack>
-    </Card>
-  );
-}
-
 export default function VendorEarnings() {
-  const { summary, commissionPercent } = useLoaderData<typeof loader>();
-
-  const rows = summary.payouts.map((p) => [
-    new Date(p.paidAt).toISOString().slice(0, 10),
-    formatMoney(p.amount, p.currency),
-    p.reference || "—",
-    p.note || "—",
-  ]);
+  const { summary, commissionPercent, commissionFlat } =
+    useLoaderData<typeof loader>();
 
   return (
-    <Page title="Earnings">
-      <BlockStack gap="400">
-        <Text as="p" tone="subdued">
-          Platform commission rate: {commissionPercent}%. Payouts are paid
-          manually by the store admin (see history below).
-        </Text>
+    <div>
+      <h1 className="sx-title">Payouts</h1>
+      <p className="sx-sub">
+        Platform commission: {commissionPercent}%
+        {commissionFlat > 0 ? ` + flat ${formatMoney(commissionFlat, summary.currency)} per order` : ""}.
+        The store admin pays you outside Shopify (bank / GCash).
+      </p>
 
-        <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
-          <StatCard
-            label="Gross revenue"
-            value={formatMoney(summary.revenue, summary.currency)}
-          />
-          <StatCard
-            label="Platform commission"
-            value={formatMoney(summary.commission, summary.currency)}
-          />
-          <StatCard
-            label="Your earnings"
-            value={formatMoney(summary.earned, summary.currency)}
-          />
-          <StatCard
-            label="Already paid"
-            value={formatMoney(summary.paid, summary.currency)}
-          />
-          <StatCard
-            label="Pending payout"
-            value={formatMoney(summary.pending, summary.currency)}
-          />
-        </InlineGrid>
+      <div className="sx-metrics">
+        <div className="sx-metric">
+          <p className="sx-metric__label">Gross revenue</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.revenue, summary.currency)}
+          </p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Platform commission</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.commission, summary.currency)}
+          </p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Your earnings</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.earned, summary.currency)}
+          </p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Pending payout</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.pending, summary.currency)}
+          </p>
+        </div>
+      </div>
 
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Payout history
-            </Text>
-            {rows.length === 0 ? (
-              <Text as="p" tone="subdued">
-                No payouts recorded yet.
-              </Text>
-            ) : (
-              <DataTable
-                columnContentTypes={["text", "numeric", "text", "text"]}
-                headings={["Date", "Amount", "Reference", "Note"]}
-                rows={rows}
-              />
-            )}
-          </BlockStack>
-        </Card>
-      </BlockStack>
-    </Page>
+      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 16px 0" }}>
+          <h2 className="sx-panel__title">Payout history</h2>
+        </div>
+        {summary.payouts.length === 0 ? (
+          <div className="sx-empty">No payouts recorded yet.</div>
+        ) : (
+          <div className="sx-table-wrap">
+            <table className="sx-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Reference</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.payouts.map((p) => (
+                  <tr key={p.id}>
+                    <td>{new Date(p.paidAt).toISOString().slice(0, 10)}</td>
+                    <td>{formatMoney(p.amount, p.currency)}</td>
+                    <td>{p.reference || "—"}</td>
+                    <td>{p.note || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

@@ -1,14 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { Link, useLoaderData } from "react-router";
-import {
-  Banner,
-  BlockStack,
-  Button,
-  Card,
-  InlineStack,
-  Page,
-  Text,
-} from "@shopify/polaris";
+import { useMemo, useState } from "react";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { listAttributionsForVendor } from "../models/attribution.server";
 import { formatMoney } from "../utils/money";
@@ -45,7 +37,6 @@ async function fetchOrderStatuses(
           query vendorOrderStatus($id: ID!) {
             order(id: $id) {
               id
-              name
               displayFulfillmentStatus
               displayFinancialStatus
             }
@@ -70,6 +61,14 @@ async function fetchOrderStatuses(
   return map;
 }
 
+function labelStatus(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
   if (result instanceof Response) throw result;
@@ -88,107 +87,164 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed loading order statuses for vendor", error);
   }
 
-  return { attributions, statuses, shop: vendor.shop };
+  return { attributions, statuses };
 };
-
-function labelStatus(value: string) {
-  return value
-    .toLowerCase()
-    .split("_")
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
 
 export default function VendorOrders() {
   const { attributions, statuses } = useLoaderData<typeof loader>();
+  const [tab, setTab] = useState("all");
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    return attributions.filter((order) => {
+      const status = statuses[order.shopifyOrderId];
+      const fulfillment = (status?.fulfillment || "").toUpperCase();
+      if (tab === "unfulfilled" && fulfillment !== "UNFULFILLED") return false;
+      if (tab === "fulfilled" && fulfillment !== "FULFILLED") return false;
+      if (!query.trim()) return true;
+      const q = query.trim().toLowerCase();
+      const name = (order.shopifyOrderName || order.shopifyOrderId).toLowerCase();
+      return name.includes(q);
+    });
+  }, [attributions, statuses, tab, query]);
 
   return (
-    <Page title="Orders">
-      <BlockStack gap="400">
-        <Banner tone="info">
-          Fulfillment is completed in Shopify Admin (or your courier app). Use{" "}
-          <strong>Open in Shopify</strong> to fulfill, then print a simple
-          invoice for your records.
-        </Banner>
+    <div>
+      <h1 className="sx-title">Orders</h1>
+      <p className="sx-sub">
+        View your orders, print invoices, and fulfill in Shopify when needed.
+      </p>
 
-        {attributions.length === 0 ? (
-          <Card>
-            <Text as="p" tone="subdued">
-              No orders with your products yet.
-            </Text>
-          </Card>
+      <div className="sx-banner info">
+        Fulfillment is done in Shopify Admin (or your courier app). Use{" "}
+        <strong>Open in Shopify</strong> then print an invoice for your records.
+      </div>
+
+      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px" }}>
+          <div className="sx-tabs">
+            {[
+              { id: "all", label: "All" },
+              { id: "unfulfilled", label: "Unfulfilled" },
+              { id: "fulfilled", label: "Fulfilled" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`sx-tab${tab === t.id ? " is-active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="sx-search">
+            <span aria-hidden>⌕</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search orders by order id"
+            />
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="sx-empty">No orders with your products yet.</div>
         ) : (
-          <BlockStack gap="300">
-            {attributions.map((order) => {
-              const items = JSON.parse(order.lineItemsJson || "[]") as Array<{
-                title: string;
-                quantity: number;
-                price: number;
-              }>;
-              const status = statuses[order.shopifyOrderId];
-              return (
-                <Card key={order.id}>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="start" wrap>
-                      <BlockStack gap="100">
-                        <Text as="h2" variant="headingMd">
+          <div className="sx-table-wrap">
+            <table className="sx-table">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Total</th>
+                  <th>Fulfillment</th>
+                  <th>Payment</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((order) => {
+                  const items = JSON.parse(order.lineItemsJson || "[]") as Array<{
+                    title: string;
+                    quantity: number;
+                  }>;
+                  const status = statuses[order.shopifyOrderId];
+                  const fulfillment = status?.fulfillment || "UNFULFILLED";
+                  const financial = status?.financial || "PENDING";
+                  return (
+                    <tr key={order.id}>
+                      <td>
+                        <p className="sx-primary">
                           {order.shopifyOrderName || order.shopifyOrderId}
-                        </Text>
-                        <Text as="p" tone="subdued">
+                        </p>
+                        <p className="sx-secondary">
                           {new Date(order.createdAt).toLocaleString()}
-                        </Text>
-                      </BlockStack>
-                      <BlockStack gap="100">
-                        <Text as="p">
-                          Total:{" "}
-                          <Text as="span" fontWeight="semibold">
-                            {formatMoney(order.subtotal, order.currency)}
-                          </Text>
-                        </Text>
-                        <Text as="p" tone="subdued">
-                          Commission{" "}
-                          {formatMoney(order.commissionAmount, order.currency)}
-                        </Text>
-                      </BlockStack>
-                    </InlineStack>
-
-                    {status && (
-                      <Text as="p">
-                        Fulfillment:{" "}
-                        <strong>{labelStatus(status.fulfillment)}</strong>
-                        {" · "}
-                        Payment:{" "}
-                        <strong>{labelStatus(status.financial)}</strong>
-                      </Text>
-                    )}
-
-                    <BlockStack gap="100">
-                      {items.map((item, index) => (
-                        <Text as="p" key={`${order.id}-${index}`}>
-                          {item.title} × {item.quantity} @{" "}
-                          {formatMoney(item.price, order.currency)}
-                        </Text>
-                      ))}
-                    </BlockStack>
-
-                    <InlineStack gap="300">
-                      {status?.adminUrl && (
-                        <Button url={status.adminUrl} target="_blank">
-                          Open in Shopify to fulfill
-                        </Button>
-                      )}
-                      <Button url={`/vendor/invoice/${order.id}`} target="_blank">
-                        Print invoice
-                      </Button>
-                      <Link to={`/vendor/invoice/${order.id}`}>View invoice</Link>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              );
-            })}
-          </BlockStack>
+                        </p>
+                        <p className="sx-secondary">
+                          {items
+                            .map((i) => `${i.title} × ${i.quantity}`)
+                            .join(" · ")}
+                        </p>
+                      </td>
+                      <td>
+                        <p className="sx-primary">
+                          {formatMoney(order.subtotal, order.currency)}
+                        </p>
+                        <p className="sx-secondary">
+                          Net{" "}
+                          {formatMoney(
+                            order.subtotal - order.commissionAmount,
+                            order.currency,
+                          )}
+                        </p>
+                      </td>
+                      <td>
+                        <span
+                          className={`sx-badge ${
+                            fulfillment === "FULFILLED" ? "ok" : "warn"
+                          }`}
+                        >
+                          {labelStatus(fulfillment)}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`sx-badge ${
+                            financial === "PAID" ? "ok" : "warn"
+                          }`}
+                        >
+                          {labelStatus(financial)}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {status?.adminUrl && (
+                            <a
+                              className="sx-btn"
+                              href={status.adminUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open in Shopify
+                            </a>
+                          )}
+                          <Link
+                            className="sx-btn sx-btn--primary"
+                            to={`/vendor/invoice/${order.id}`}
+                            target="_blank"
+                          >
+                            Invoice
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </BlockStack>
-    </Page>
+      </div>
+    </div>
   );
 }

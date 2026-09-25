@@ -1,21 +1,12 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Form,
+  Link,
   useActionData,
   useLoaderData,
   useNavigation,
 } from "react-router";
-import {
-  Banner,
-  BlockStack,
-  Button,
-  Card,
-  IndexTable,
-  InlineStack,
-  Link,
-  Page,
-  Text,
-} from "@shopify/polaris";
+import { useMemo, useState } from "react";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { unauthenticated } from "../shopify.server";
 import {
@@ -80,134 +71,216 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 
+function statusBadge(status: string) {
+  const s = String(status || "").toUpperCase();
+  if (s === "ACTIVE") return { label: "Active", tone: "ok" };
+  if (s === "DRAFT") return { label: "Draft", tone: "warn" };
+  if (s === "ARCHIVED") return { label: "Archived", tone: "bad" };
+  return { label: status, tone: "ok" };
+}
+
 export default function VendorProducts() {
   const { products } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
+  const [tab, setTab] = useState("all");
+  const [query, setQuery] = useState("");
   const deletingId =
     busy && navigation.formData?.get("intent") === "delete"
       ? String(navigation.formData.get("productId") || "")
       : "";
 
-  const rows = products.map(
-    (p: {
+  const rows = useMemo(() => {
+    return (products as Array<{
       id: string;
       title: string;
       status: string;
       totalInventory?: number | null;
+      featuredImage?: { url?: string } | null;
       variants?: { nodes?: Array<{ price?: string }> };
-    }) => ({
-      id: p.id,
-      title: p.title,
-      status: p.status,
-      stock: p.totalInventory ?? "—",
-      price: p.variants?.nodes?.[0]?.price
-        ? `$${p.variants.nodes[0].price}`
-        : "—",
-      pathId: toProductPathId(p.id),
-    }),
-  );
+    }>)
+      .map((p) => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        stock: p.totalInventory ?? 0,
+        price: p.variants?.nodes?.[0]?.price
+          ? `$${p.variants.nodes[0].price}`
+          : "—",
+        image: p.featuredImage?.url || null,
+        pathId: toProductPathId(p.id),
+      }))
+      .filter((row) => {
+        const s = row.status.toUpperCase();
+        if (tab === "active" && s !== "ACTIVE") return false;
+        if (tab === "draft" && s !== "DRAFT") return false;
+        if (!query.trim()) return true;
+        return row.title.toLowerCase().includes(query.trim().toLowerCase());
+      });
+  }, [products, tab, query]);
 
   return (
-    <Page
-      title="Products"
-      primaryAction={{ content: "Add product", url: "/vendor/products/new" }}
-    >
-      <BlockStack gap="400">
-        <Banner tone="info">
-          Use <strong>Add product</strong> for the easy photo + speak flow, or
-          edit any product from this list.
-        </Banner>
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 18,
+        }}
+      >
+        <div>
+          <h1 className="sx-title">Products</h1>
+          <p className="sx-sub">Add, edit, or remove your listings</p>
+        </div>
+        <Link className="sx-btn sx-btn--primary" to="/vendor/products/new">
+          + Add a product
+        </Link>
+      </div>
 
-        {actionData && "error" in actionData && actionData.error && (
-          <Banner tone="critical">{actionData.error}</Banner>
-        )}
-        {actionData && "message" in actionData && actionData.message && (
-          <Banner tone="success">{actionData.message}</Banner>
-        )}
+      {actionData && "error" in actionData && actionData.error && (
+        <div className="sx-banner err">{actionData.error}</div>
+      )}
+      {actionData && "message" in actionData && actionData.message && (
+        <div className="sx-banner ok">{actionData.message}</div>
+      )}
 
-        <Card padding="0">
-          {rows.length === 0 ? (
-            <div style={{ padding: 16 }}>
-              <Text as="p" tone="subdued">
-                No products yet.{" "}
-                <Link url="/vendor/products/new">Add your first product</Link>
-              </Text>
-            </div>
-          ) : (
-            <IndexTable
-              resourceName={{ singular: "product", plural: "products" }}
-              itemCount={rows.length}
-              selectable={false}
-              headings={[
-                { title: "Title" },
-                { title: "Status" },
-                { title: "Stock" },
-                { title: "Price" },
-                { title: "Actions" },
-              ]}
-            >
-              {rows.map(
-                (
-                  row: {
-                    id: string;
-                    title: string;
-                    status: string;
-                    stock: number | string;
-                    price: string;
-                    pathId: string;
-                  },
-                  index: number,
-                ) => (
-                <IndexTable.Row id={row.id} key={row.id} position={index}>
-                  <IndexTable.Cell>
-                    <Text as="span" fontWeight="semibold">
-                      {row.title}
-                    </Text>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>{row.status}</IndexTable.Cell>
-                  <IndexTable.Cell>{row.stock}</IndexTable.Cell>
-                  <IndexTable.Cell>{row.price}</IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <InlineStack gap="300" blockAlign="center">
-                      <Link url={`/vendor/products/${row.pathId}`}>Edit</Link>
-                      <Form
-                        method="post"
-                        onSubmit={(event) => {
-                          if (
-                            !confirm(
-                              `Delete "${row.title}"? This cannot be undone.`,
-                            )
-                          ) {
-                            event.preventDefault();
-                          }
-                        }}
-                      >
-                        <input type="hidden" name="intent" value="delete" />
-                        <input
-                          type="hidden"
-                          name="productId"
-                          value={row.pathId}
-                        />
-                        <Button
-                          submit
-                          tone="critical"
-                          variant="plain"
-                          loading={deletingId === row.pathId}
-                          disabled={busy && deletingId !== row.pathId}
-                        >
-                          Delete
-                        </Button>
-                      </Form>
-                    </InlineStack>
-                  </IndexTable.Cell>
-                </IndexTable.Row>
-              ))}
-            </IndexTable>
-          )}
-        </Card>
-      </BlockStack>
-    </Page>
+      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px" }}>
+          <div className="sx-tabs">
+            {[
+              { id: "all", label: "All" },
+              { id: "active", label: "Active" },
+              { id: "draft", label: "Draft" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`sx-tab${tab === t.id ? " is-active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="sx-search">
+            <span aria-hidden>⌕</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your products by title"
+            />
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="sx-empty">
+            No products yet.{" "}
+            <Link className="sx-link" to="/vendor/products/new">
+              Add your first product
+            </Link>
+          </div>
+        ) : (
+          <div className="sx-table-wrap">
+            <table className="sx-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Status</th>
+                  <th>Stock</th>
+                  <th>Price</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const badge = statusBadge(row.status);
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                          {row.image ? (
+                            <img
+                              src={row.image}
+                              alt=""
+                              style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 8,
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 8,
+                                background: "#f1f2f3",
+                              }}
+                            />
+                          )}
+                          <div>
+                            <p className="sx-primary">{row.title}</p>
+                            <p className="sx-secondary">
+                              Current inventory is {row.stock}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`sx-badge ${badge.tone}`}>
+                          {badge.label}
+                        </span>
+                      </td>
+                      <td>{row.stock}</td>
+                      <td>{row.price}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <Link
+                            className="sx-btn"
+                            to={`/vendor/products/${row.pathId}`}
+                          >
+                            Edit
+                          </Link>
+                          <Form
+                            method="post"
+                            onSubmit={(event) => {
+                              if (
+                                !confirm(
+                                  `Delete "${row.title}"? This cannot be undone.`,
+                                )
+                              ) {
+                                event.preventDefault();
+                              }
+                            }}
+                          >
+                            <input type="hidden" name="intent" value="delete" />
+                            <input
+                              type="hidden"
+                              name="productId"
+                              value={row.pathId}
+                            />
+                            <button
+                              className="sx-btn sx-btn--danger"
+                              type="submit"
+                              disabled={busy && deletingId !== row.pathId}
+                            >
+                              {deletingId === row.pathId ? "Deleting…" : "Delete"}
+                            </button>
+                          </Form>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

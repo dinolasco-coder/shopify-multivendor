@@ -1,13 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
-import {
-  BlockStack,
-  Card,
-  DataTable,
-  InlineGrid,
-  Page,
-  Text,
-} from "@shopify/polaris";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import {
   listAttributionsForVendor,
@@ -29,74 +21,86 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <BlockStack gap="100">
-        <Text as="p" variant="bodySm" tone="subdued">
-          {label}
-        </Text>
-        <Text as="p" variant="headingLg">
-          {value}
-        </Text>
-      </BlockStack>
-    </Card>
-  );
-}
-
 export default function VendorSales() {
   const { summary, attributions, commissionPercent } =
     useLoaderData<typeof loader>();
 
-  const rows = attributions.map((row) => [
-    row.shopifyOrderName || row.shopifyOrderId,
-    formatMoney(row.subtotal, row.currency),
-    formatMoney(row.commissionAmount, row.currency),
-    formatMoney(row.subtotal - row.commissionAmount, row.currency),
-  ]);
-
   return (
-    <Page title="Sales">
-      <BlockStack gap="400">
-        <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
-          <StatCard label="Orders" value={String(summary.orderCount)} />
-          <StatCard
-            label="Gross revenue"
-            value={formatMoney(summary.revenue, summary.currency)}
-          />
-          <StatCard
-            label={`Platform commission (${commissionPercent}%)`}
-            value={formatMoney(summary.commission, summary.currency)}
-          />
-          <StatCard
-            label="Your earnings"
-            value={formatMoney(summary.vendorEarnings, summary.currency)}
-          />
-        </InlineGrid>
+    <div>
+      <h1 className="sx-title">Sales</h1>
+      <p className="sx-sub">
+        Your order history and earnings after the {commissionPercent}% platform
+        commission.
+      </p>
 
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Order history
-            </Text>
-            {rows.length === 0 ? (
-              <Text as="p" tone="subdued">
-                No sales recorded yet.
-              </Text>
-            ) : (
-              <DataTable
-                columnContentTypes={["text", "numeric", "numeric", "numeric"]}
-                headings={["Order", "Subtotal", "Commission", "You earn"]}
-                rows={rows}
-              />
-            )}
-            <Text as="p" variant="bodySm" tone="subdued">
-              Payouts are settled manually by the store admin. See Earnings for
-              paid vs pending.
-            </Text>
-          </BlockStack>
-        </Card>
-      </BlockStack>
-    </Page>
+      <div className="sx-metrics">
+        <div className="sx-metric">
+          <p className="sx-metric__label">Orders</p>
+          <p className="sx-metric__value">{summary.orderCount}</p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Gross revenue</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.revenue, summary.currency)}
+          </p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Commission</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.commission, summary.currency)}
+          </p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Your earnings</p>
+          <p className="sx-metric__value">
+            {formatMoney(summary.vendorEarnings, summary.currency)}
+          </p>
+        </div>
+      </div>
+
+      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 16px 0" }}>
+          <h2 className="sx-panel__title">Order history</h2>
+        </div>
+        {attributions.length === 0 ? (
+          <div className="sx-empty">No sales recorded yet.</div>
+        ) : (
+          <div className="sx-table-wrap">
+            <table className="sx-table">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Subtotal</th>
+                  <th>Commission</th>
+                  <th>You earn</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attributions.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <p className="sx-primary">
+                        {row.shopifyOrderName || row.shopifyOrderId}
+                      </p>
+                      <p className="sx-secondary">
+                        {new Date(row.createdAt).toLocaleString()}
+                      </p>
+                    </td>
+                    <td>{formatMoney(row.subtotal, row.currency)}</td>
+                    <td>{formatMoney(row.commissionAmount, row.currency)}</td>
+                    <td>
+                      {formatMoney(
+                        row.subtotal - row.commissionAmount,
+                        row.currency,
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
