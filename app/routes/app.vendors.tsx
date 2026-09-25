@@ -17,10 +17,6 @@ import {
 import { getOrCreateSettings } from "../models/settings.server";
 import { hashPassword } from "../services/password.server";
 import { ensureVendorCollection } from "../services/collections.server";
-import {
-  sendVendorApprovedEmail,
-  sendVendorInviteEmail,
-} from "../services/email.server";
 import type { VendorStatus } from "../constants";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -51,7 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (existing) {
       return {
         error:
-          "A vendor with that email already exists. Use “Resend invite email” on their card, or Delete them first then invite again.",
+          "A vendor with that email already exists. Use “Reset password” on their card, or Delete them first then invite again.",
       };
     }
 
@@ -67,23 +63,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status: "pending",
     });
 
-    const emailResult = await sendVendorInviteEmail({
-      to: email,
-      vendorName: name,
-      shop: session.shop,
-      temporaryPassword: password,
-    });
-
-    if (!emailResult.sent) {
-      return {
-        ok: true,
-        message: `Vendor created, but email was not sent: ${emailResult.error || "unknown error"}. Share the login link and temporary password manually.`,
-      };
-    }
-
     return {
       ok: true,
-      message: "Vendor invited and email sent. They can log in once approved.",
+      message: `Vendor invited. Share login link and temporary password with ${email} manually.`,
     };
   }
 
@@ -104,24 +86,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status,
       shopifyCollectionId: shopifyCollectionId ?? undefined,
     });
-
-    if (status === "approved") {
-      const mail = await sendVendorApprovedEmail({
-        to: vendor.email,
-        vendorName: vendor.name,
-        shop: session.shop,
-      });
-      if (!mail.sent) {
-        return {
-          ok: true,
-          message: `Vendor marked as approved, but email was not sent: ${mail.error || "unknown error"}.`,
-        };
-      }
-      return {
-        ok: true,
-        message: "Vendor approved and notification email sent.",
-      };
-    }
 
     return { ok: true, message: `Vendor marked as ${status}.` };
   }
@@ -150,7 +114,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: true, message: `${vendor.name} was deleted.` };
   }
 
-  if (intent === "resendInvite") {
+  if (intent === "resetPassword") {
     const vendorId = String(form.get("vendorId") || "");
     const vendor = await getVendorById(vendorId);
     if (!vendor || vendor.shop !== session.shop) {
@@ -162,23 +126,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       passwordHash: hashPassword(temporaryPassword),
     });
 
-    const emailResult = await sendVendorInviteEmail({
-      to: vendor.email,
-      vendorName: vendor.name,
-      shop: session.shop,
-      temporaryPassword,
-    });
-
-    if (!emailResult.sent) {
-      return {
-        ok: true,
-        message: `Invite email failed: ${emailResult.error || "unknown error"}. Temporary password for ${vendor.email}: ${temporaryPassword}`,
-      };
-    }
-
     return {
       ok: true,
-      message: `Invite email resent to ${vendor.email}.`,
+      message: `Password reset for ${vendor.email}. Temporary password: ${temporaryPassword}`,
     };
   }
 
@@ -210,7 +160,7 @@ export default function VendorsPage() {
               label="Temporary password"
               name="password"
               required
-              details="Minimum 8 characters. This is emailed to the vendor (and shown only if email fails)."
+              details="Minimum 8 characters. Share this with the vendor manually (login link + password)."
             />
             <s-number-field
               label="Commission %"
@@ -263,9 +213,9 @@ export default function VendorsPage() {
 
                   <s-stack direction="inline" gap="base">
                     <Form method="post">
-                      <input type="hidden" name="intent" value="resendInvite" />
+                      <input type="hidden" name="intent" value="resetPassword" />
                       <input type="hidden" name="vendorId" value={vendor.id} />
-                      <s-button type="submit">Resend invite email</s-button>
+                      <s-button type="submit">Reset password</s-button>
                     </Form>
                     {vendor.status !== "approved" && (
                       <Form method="post">
