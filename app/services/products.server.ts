@@ -637,9 +637,6 @@ export async function listMarketplaceProducts(
           handle
           featuredImage { url altText }
           totalInventory
-          variantsCount {
-            count
-          }
           priceRangeV2 {
             minVariantPrice { amount currencyCode }
           }

@@ -4,220 +4,110 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { countVendorsByStatus } from "../models/vendor.server";
 import { salesSummaryForShop } from "../models/attribution.server";
-import { listMarketplaceProducts } from "../services/products.server";
+import { getOrCreateSettings } from "../models/settings.server";
 import { formatMoney } from "../utils/money";
 
-function appBaseUrl(request: Request) {
-  return (
-    process.env.SHOPIFY_APP_URL?.replace(/\/$/, "") ||
-    new URL(request.url).origin
-  );
-}
-
-async function fetchShopDashboard(admin: {
-  graphql: (
-    query: string,
-    options?: { variables?: Record<string, unknown> },
-  ) => Promise<Response>;
-}) {
-  const response = await admin.graphql(
-    `#graphql
-    query marketplaceAdminHome {
-      shop {
-        name
-        email
-        myshopifyDomain
-        primaryDomain { url }
-      }
-      ordersCount(query: "fulfillment_status:unshipped") {
-        count
-      }
-    }`,
-  );
-  const json = await response.json();
-  return {
-    shopName: (json.data?.shop?.name as string) || "Marketplace",
-    shopEmail: (json.data?.shop?.email as string) || "",
-    shopDomain:
-      (json.data?.shop?.myshopifyDomain as string) ||
-      (json.data?.shop?.primaryDomain?.url as string) ||
-      "",
-    unfulfilledOrders: Number(json.data?.ordersCount?.count ?? 0),
-  };
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [statusCounts, sales, shopInfo, products] = await Promise.all([
+  const [statusCounts, sales, settings] = await Promise.all([
     countVendorsByStatus(shop),
     salesSummaryForShop(shop),
-    fetchShopDashboard(admin).catch(() => ({
-      shopName: shop.replace(/\.myshopify\.com$/i, ""),
-      shopEmail: "",
-      shopDomain: shop,
-      unfulfilledOrders: 0,
-    })),
-    listMarketplaceProducts(admin, { first: 100 }).catch(() => []),
+    getOrCreateSettings(shop),
   ]);
 
-  const approved = statusCounts.approved ?? 0;
-  const activeProducts = Array.isArray(products)
-    ? products.filter(
-        (p: { status?: string }) => String(p.status || "").toUpperCase() === "ACTIVE",
-      ).length
-    : 0;
-
   return {
-    shopName: shopInfo.shopName,
-    shopEmail: shopInfo.shopEmail,
-    shopDomain: shopInfo.shopDomain || shop,
-    shopUrl: `https://${(shopInfo.shopDomain || shop).replace(/^https?:\/\//, "")}`,
-    revenue: sales.revenue,
-    currency: sales.currency,
-    unfulfilledOrders: shopInfo.unfulfilledOrders,
-    activeSellers: approved,
-    activeProducts,
-    vendorPortalUrl: `${appBaseUrl(request)}/vendor/login`,
+    statusCounts,
+    sales,
+    settings,
+    vendorPortalUrl: "/vendor/login",
   };
 };
 
-const styles = `
-  .nx-home { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; }
-  .nx-welcome { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 20px; }
-  .nx-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
-  .nx-metric {
-    background: #fff; border: 1px solid #e4e5e7; border-radius: 12px;
-    padding: 18px 20px; text-decoration: none; color: inherit; display: block;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-  .nx-metric:hover { border-color: #c9cccf; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  .nx-metric__label { font-size: 13px; color: #6d7175; margin: 0 0 10px; }
-  .nx-metric__value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
-  .nx-panel {
-    background: #fff; border: 1px solid #e4e5e7; border-radius: 12px; padding: 24px;
-  }
-  .nx-panel__title { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
-  .nx-panel__sub { font-size: 14px; color: #6d7175; margin: 0 0 20px; line-height: 1.45; max-width: 720px; }
-  .nx-guides { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .nx-guide { text-decoration: none; color: inherit; display: block; }
-  .nx-guide__thumb {
-    position: relative; height: 140px; border-radius: 10px; overflow: hidden;
-    background: linear-gradient(135deg, #4a1d6a 0%, #8b2d9b 45%, #d946a6 100%);
-    display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
-  }
-  .nx-guide__thumb-label {
-    position: absolute; left: 14px; bottom: 12px; right: 14px;
-    color: #fff; font-size: 14px; font-weight: 600; line-height: 1.3;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
-  }
-  .nx-guide__play {
-    width: 44px; height: 44px; border-radius: 999px; background: rgba(255,255,255,0.95);
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  }
-  .nx-guide__play svg { margin-left: 2px; }
-  .nx-guide__title { font-size: 14px; font-weight: 650; margin: 0 0 4px; }
-  .nx-guide__desc { font-size: 13px; color: #6d7175; margin: 0; line-height: 1.4; }
-  @media (max-width: 900px) {
-    .nx-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .nx-guides { grid-template-columns: 1fr; }
-  }
-`;
-
-function PlayIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path d="M5 3.5v9l8-4.5-8-4.5z" fill="#4a1d6a" />
-    </svg>
-  );
-}
-
 export default function Dashboard() {
-  const data = useLoaderData<typeof loader>();
-  const welcomeName = data.shopName || "there";
+  const { statusCounts, sales, settings, vendorPortalUrl } =
+    useLoaderData<typeof loader>();
+
+  const pending = statusCounts.pending ?? 0;
+  const approved = statusCounts.approved ?? 0;
+  const suspended = statusCounts.suspended ?? 0;
 
   return (
-    <s-page heading="Home">
-      <style dangerouslySetInnerHTML={{ __html: styles }} />
-      <div className="nx-home">
-        <h1 className="nx-welcome">Welcome {welcomeName}!</h1>
+    <s-page heading="Multi-Vendor Marketplace">
+      <s-section heading="Overview">
+        <s-paragraph>
+          Manage vendors, products, and commission from one place. Customers
+          shop normally on your Online Store - products from multiple vendors
+          share a single Shopify cart and checkout.
+        </s-paragraph>
+        <s-stack direction="inline" gap="base">
+          <s-clickable href="/app/vendors">
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>Vendors pending</s-heading>
+              <s-text>{pending}</s-text>
+            </s-box>
+          </s-clickable>
+          <s-clickable href="/app/vendors">
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>Approved vendors</s-heading>
+              <s-text>{approved}</s-text>
+            </s-box>
+          </s-clickable>
+          <s-box padding="base" borderWidth="base" borderRadius="base">
+            <s-heading>Suspended</s-heading>
+            <s-text>{suspended}</s-text>
+          </s-box>
+          <s-clickable href="/app/orders">
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>Attributed orders</s-heading>
+              <s-text>{sales.orderCount}</s-text>
+            </s-box>
+          </s-clickable>
+        </s-stack>
+      </s-section>
 
-        <div className="nx-metrics">
-          <a className="nx-metric" href="/app/orders">
-            <p className="nx-metric__label">Total revenue</p>
-            <p className="nx-metric__value">
-              {formatMoney(data.revenue, data.currency)}
-            </p>
-          </a>
-          <a className="nx-metric" href="/app/orders">
-            <p className="nx-metric__label">Unfulfilled orders</p>
-            <p className="nx-metric__value">{data.unfulfilledOrders}</p>
-          </a>
-          <a className="nx-metric" href="/app/vendors">
-            <p className="nx-metric__label">Active sellers</p>
-            <p className="nx-metric__value">{data.activeSellers}</p>
-          </a>
-          <a className="nx-metric" href="/app/products">
-            <p className="nx-metric__label">Active products</p>
-            <p className="nx-metric__value">{data.activeProducts}</p>
-          </a>
-        </div>
+      <s-section heading="Commission snapshot">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Marketplace revenue:{" "}
+            <s-text type="strong">
+              {formatMoney(sales.revenue, sales.currency)}
+            </s-text>
+          </s-paragraph>
+          <s-paragraph>
+            Commission owed to platform:{" "}
+            <s-text type="strong">
+              {formatMoney(sales.commission, sales.currency)}
+            </s-text>
+          </s-paragraph>
+          <s-paragraph>
+            Default commission: {settings.defaultCommissionPercent}% - Product
+            approval{" "}
+            {settings.requireProductApproval ? "required" : "not required"}
+          </s-paragraph>
+        </s-stack>
+      </s-section>
 
-        <div className="nx-panel">
-          <h2 className="nx-panel__title">See how your marketplace works</h2>
-          <p className="nx-panel__sub">
-            Everything you need to know about managing sellers, routing orders,
-            and setting commissions.
-          </p>
-          <div className="nx-guides">
-            <a className="nx-guide" href={data.vendorPortalUrl} target="_blank" rel="noreferrer">
-              <div className="nx-guide__thumb">
-                <div className="nx-guide__play">
-                  <PlayIcon />
-                </div>
-                <span className="nx-guide__thumb-label">
-                  See your seller&apos;s dashboard
-                </span>
-              </div>
-              <p className="nx-guide__title">Seller portal overview</p>
-              <p className="nx-guide__desc">
-                See how sellers manage products, orders, and payouts from their
-                portal.
-              </p>
-            </a>
-            <a className="nx-guide" href="/app/orders">
-              <div className="nx-guide__thumb">
-                <div className="nx-guide__play">
-                  <PlayIcon />
-                </div>
-                <span className="nx-guide__thumb-label">
-                  Order routing to sellers
-                </span>
-              </div>
-              <p className="nx-guide__title">Assigning orders to your sellers</p>
-              <p className="nx-guide__desc">
-                See how orders are attributed to the right sellers automatically.
-              </p>
-            </a>
-            <a className="nx-guide" href="/app/settings">
-              <div className="nx-guide__thumb">
-                <div className="nx-guide__play">
-                  <PlayIcon />
-                </div>
-                <span className="nx-guide__thumb-label">
-                  Set commission details for any seller
-                </span>
-              </div>
-              <p className="nx-guide__title">Setting up seller commissions</p>
-              <p className="nx-guide__desc">
-                Set default commission rates and adjust them per seller.
-              </p>
-            </a>
-          </div>
-        </div>
-      </div>
+      <s-section heading="Quick links">
+        <s-unordered-list>
+          <s-list-item>
+            <s-link href="/app/vendors">Review vendor applications</s-link>
+          </s-list-item>
+          <s-list-item>
+            <s-link href="/app/products">Browse marketplace products</s-link>
+          </s-list-item>
+          <s-list-item>
+            <s-link href="/app/settings">Adjust default commission</s-link>
+          </s-list-item>
+          <s-list-item>
+            Vendor portal login:{" "}
+            <s-link href={vendorPortalUrl} target="_blank">
+              {vendorPortalUrl}
+            </s-link>
+          </s-list-item>
+        </s-unordered-list>
+      </s-section>
     </s-page>
   );
 }
