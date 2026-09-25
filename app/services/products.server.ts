@@ -281,6 +281,34 @@ export async function updateVendorProduct(
   return updateJson.data?.productUpdate?.product;
 }
 
+export async function deleteVendorProduct(
+  admin: AdminGraphql,
+  productId: string,
+) {
+  const response = await admin.graphql(
+    `#graphql
+    mutation marketplaceProductDelete($input: ProductDeleteInput!) {
+      productDelete(input: $input) {
+        deletedProductId
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        input: { id: productId },
+      },
+    },
+  );
+  const json = await response.json();
+  const userErrors = json.data?.productDelete?.userErrors ?? [];
+  if (userErrors.length) {
+    throw new Error(userErrors.map((e: { message: string }) => e.message).join(", "));
+  }
+  if (!json.data?.productDelete?.deletedProductId) {
+    throw new Error("Failed to delete product.");
+  }
+}
+
 /** Always write marketplace.vendor_id (create + updates + backfill). */
 export async function setProductVendorMetafield(
   admin: AdminGraphql,

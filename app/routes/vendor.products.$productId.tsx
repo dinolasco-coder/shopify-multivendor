@@ -15,6 +15,7 @@ import {
   FormLayout,
   Page,
   Select,
+  Text,
   TextField,
 } from "@shopify/polaris";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
@@ -22,6 +23,7 @@ import { unauthenticated } from "../shopify.server";
 import {
   getProductDetail,
   updateVendorProduct,
+  deleteVendorProduct,
 } from "../services/products.server";
 import { fromProductPathId } from "../utils/product-id";
 
@@ -54,24 +56,31 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const productId = fromProductPathId(pathId);
 
   const form = await request.formData();
-  const title = String(form.get("title") || "").trim();
-  const descriptionHtml = String(form.get("description") || "").trim();
-  const price = String(form.get("price") || "").trim();
-  const inventoryQuantity = Number(form.get("inventoryQuantity") || 0);
-  const status = String(form.get("status") || "ACTIVE") as
-    | "ACTIVE"
-    | "DRAFT"
-    | "ARCHIVED";
-
-  if (!title || !price) {
-    return { error: "Title and price are required." };
-  }
+  const intent = String(form.get("intent") || "save");
 
   try {
     const { admin } = await unauthenticated.admin(vendor.shop);
     const existing = await getProductDetail(admin, productId);
     if (!existing || existing.metafield?.value !== vendor.id) {
       return { error: "You can only edit your own products." };
+    }
+
+    if (intent === "delete") {
+      await deleteVendorProduct(admin, productId);
+      throw redirect("/vendor/products");
+    }
+
+    const title = String(form.get("title") || "").trim();
+    const descriptionHtml = String(form.get("description") || "").trim();
+    const price = String(form.get("price") || "").trim();
+    const inventoryQuantity = Number(form.get("inventoryQuantity") || 0);
+    const status = String(form.get("status") || "ACTIVE") as
+      | "ACTIVE"
+      | "DRAFT"
+      | "ARCHIVED";
+
+    if (!title || !price) {
+      return { error: "Title and price are required." };
     }
 
     const variant = existing.variants?.nodes?.[0];
@@ -91,6 +100,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     return { ok: true, message: "Product updated." };
   } catch (error) {
+    if (error instanceof Response) throw error;
     return {
       error: error instanceof Error ? error.message : "Failed to update product.",
     };
@@ -175,11 +185,41 @@ export default function EditVendorProduct() {
                 value={status}
                 onChange={setStatus}
               />
-              <Button submit variant="primary" loading={busy}>
+              <Button submit variant="primary" loading={busy && navigation.formData?.get("intent") !== "delete"}>
                 Save changes
               </Button>
             </FormLayout>
           </Form>
+        </Card>
+
+        <Card>
+          <BlockStack gap="300">
+            <Text as="p" tone="subdued">
+              Delete removes this product from your store permanently.
+            </Text>
+            <Form
+              method="post"
+              onSubmit={(event) => {
+                if (
+                  !confirm(
+                    `Delete "${product.title}"? This cannot be undone.`,
+                  )
+                ) {
+                  event.preventDefault();
+                }
+              }}
+            >
+              <input type="hidden" name="intent" value="delete" />
+              <Button
+                submit
+                tone="critical"
+                loading={busy && navigation.formData?.get("intent") === "delete"}
+                disabled={busy && navigation.formData?.get("intent") !== "delete"}
+              >
+                Delete product
+              </Button>
+            </Form>
+          </BlockStack>
         </Card>
       </BlockStack>
     </Page>
