@@ -65,7 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     return {
       ok: true,
-      message: `Vendor invited. Share login link and temporary password with ${email} manually.`,
+      message: `Vendor invited. Share ${new URL(request.url).origin}/vendor/login and the temporary password with ${email}.`,
     };
   }
 

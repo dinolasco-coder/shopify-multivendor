@@ -10,7 +10,11 @@ import {
   ExitIcon,
 } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { authenticateVendor } from "../services/vendor-auth.server";
+import {
+  authenticateVendor,
+  endVendorSession,
+} from "../services/vendor-auth.server";
+import { resolveVendorPortalShop } from "../services/portal-shop.server";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: polarisStyles },
@@ -32,6 +36,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await authenticateVendor(request);
   if (result instanceof Response) {
     throw result;
+  }
+
+  const portalShop = await resolveVendorPortalShop();
+  if (portalShop && result.vendor.shop !== portalShop) {
+    const clearCookie = await endVendorSession(request);
+    throw redirect("/vendor/login", {
+      headers: { "Set-Cookie": clearCookie },
+    });
   }
 
   if (

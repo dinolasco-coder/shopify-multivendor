@@ -1,5 +1,12 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, Link, redirect, useActionData, useNavigation } from "react-router";
+import {
+  Form,
+  Link,
+  redirect,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
 import { useState } from "react";
 import {
   Banner,
@@ -30,6 +37,7 @@ import {
   recordFailedAttempt,
   registerAttemptKey,
 } from "../services/login-rate-limit.server";
+import { resolveVendorPortalShop } from "../services/portal-shop.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const token = getVendorSessionToken(request);
@@ -37,12 +45,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (vendor) {
     throw redirect(vendor.status === "approved" ? "/vendor" : "/vendor/pending");
   }
-  return null;
+
+  const portalShop = await resolveVendorPortalShop();
+  if (!portalShop) {
+    return {
+      portalShop: null as string | null,
+      error:
+        "Vendor portal shop is not configured. Set VENDOR_PORTAL_SHOP on the server (e.g. your-store.myshopify.com).",
+    };
+  }
+
+  return { portalShop, error: null as string | null };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const originError = assertSameOrigin(request);
   if (originError) return { error: originError };
+
+  const portalShop = await resolveVendorPortalShop();
+  if (!portalShop) {
+    return {
+      error:
+        "Vendor portal shop is not configured. Set VENDOR_PORTAL_SHOP on the server.",
+    };
+  }
 
   const key = registerAttemptKey(request);
   const limit = checkRateLimit(key, REGISTER_MAX_ATTEMPTS, REGISTER_WINDOW_MS);
@@ -51,12 +77,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const form = await request.formData();
-  const shop = String(form.get("shop") || "").trim().toLowerCase();
   const name = String(form.get("name") || "").trim();
   const email = String(form.get("email") || "").trim().toLowerCase();
   const password = String(form.get("password") || "");
 
-  if (!shop || !name || !email || password.length < 8) {
+  if (!name || !email || password.length < 8) {
     recordFailedAttempt(
       key,
       REGISTER_MAX_ATTEMPTS,
@@ -64,15 +89,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       REGISTER_LOCK_MS,
     );
     return {
-      error: "Shop, business name, email, and password (8+ chars) are required.",
+      error: "Business name, email, and password (8+ chars) are required.",
     };
   }
 
-  const normalizedShop = shop.includes(".")
-    ? shop
-    : `${shop}.myshopify.com`;
-
-  const existing = await getVendorByEmail(normalizedShop, email);
+  const existing = await getVendorByEmail(portalShop, email);
   if (existing) {
     recordFailedAttempt(
       key,
@@ -80,12 +101,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       REGISTER_WINDOW_MS,
       REGISTER_LOCK_MS,
     );
-    return { error: "An account with that email already exists for this shop." };
+    return { error: "An account with that email already exists." };
   }
 
-  const settings = await getOrCreateSettings(normalizedShop);
+  const settings = await getOrCreateSettings(portalShop);
   const vendor = await createVendor({
-    shop: normalizedShop,
+    shop: portalShop,
     name,
     email,
     passwordHash: hashPassword(password),
@@ -102,10 +123,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function VendorRegister() {
+  const { portalShop, error: loaderError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
-  const [shop, setShop] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -124,30 +145,28 @@ export default function VendorRegister() {
             </Text>
           </div>
 
-          {actionData?.error && (
-            <Banner tone="critical">{actionData.error}</Banner>
+          {(loaderError || actionData?.error) && (
+            <Banner tone="critical">{loaderError || actionData?.error}</Banner>
+          )}
+
+          {portalShop && (
+            <Text as="p" tone="subdued" alignment="center">
+              Store: {portalShop}
+            </Text>
           )}
 
           <Form method="post">
-            <input type="hidden" name="shop" value={shop} />
             <input type="hidden" name="name" value={name} />
             <input type="hidden" name="email" value={email} />
             <input type="hidden" name="password" value={password} />
             <BlockStack gap="400">
-              <TextField
-                label="Shop"
-                value={shop}
-                onChange={setShop}
-                autoComplete="organization"
-                placeholder="your-store.myshopify.com"
-                helpText="example.myshopify.com"
-              />
               <TextField
                 label="Store name"
                 value={name}
                 onChange={setName}
                 autoComplete="organization"
                 placeholder="Your business name"
+                disabled={!portalShop}
               />
               <TextField
                 label="Email"
@@ -156,6 +175,7 @@ export default function VendorRegister() {
                 onChange={setEmail}
                 autoComplete="email"
                 placeholder="Email"
+                disabled={!portalShop}
               />
               <TextField
                 label="Password"
@@ -165,6 +185,7 @@ export default function VendorRegister() {
                 autoComplete="new-password"
                 placeholder="Password"
                 helpText="At least 8 characters"
+                disabled={!portalShop}
               />
               <Button
                 submit
@@ -172,7 +193,10 @@ export default function VendorRegister() {
                 size="large"
                 fullWidth
                 loading={busy}
-                disabled={Boolean(actionData && "locked" in actionData && actionData.locked)}
+                disabled={
+                  !portalShop ||
+                  Boolean(actionData && "locked" in actionData && actionData.locked)
+                }
               >
                 Create account
               </Button>
