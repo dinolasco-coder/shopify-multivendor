@@ -34,9 +34,8 @@ export default function VendorPending() {
           </Text>
           {vendor.status === "pending" && (
             <Text as="p">
-              The store admin will review your application. Once approved, you
-              can add products and manage inventory from this portal. Make sure
-              you logged in with the same shop domain the admin approved.
+              Please wait for the store admin to approve you. After approval,
+              you can add products from this portal.
             </Text>
           )}
           {vendor.status === "rejected" && (

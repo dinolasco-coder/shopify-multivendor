@@ -66,8 +66,8 @@ export default function VendorProducts() {
     >
       <BlockStack gap="400">
         <Banner tone="info">
-          Add products the same way as in Shopify Admin — title, media, pricing,
-          and inventory.
+          Use <strong>Add product</strong> for the easy photo + speak flow, or
+          edit any product from this list.
         </Banner>
 
         <Card padding="0">

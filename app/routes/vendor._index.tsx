@@ -2,8 +2,10 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import {
   BlockStack,
+  Button,
   Card,
   InlineGrid,
+  InlineStack,
   Link,
   Page,
   ResourceList,
@@ -76,7 +78,33 @@ export default function VendorDashboard() {
 
   return (
     <Page title={`Welcome, ${vendor.name}`}>
-      <BlockStack gap="400">
+      <BlockStack gap="500">
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">
+              What do you want to do?
+            </Text>
+            <InlineStack gap="300" wrap>
+              <Button variant="primary" size="large" url="/vendor/products/new">
+                Add a product
+              </Button>
+              <Button size="large" url="/vendor/products">
+                My products
+              </Button>
+              <Button size="large" url="/vendor/orders">
+                My orders
+              </Button>
+              <Button size="large" url="/vendor/earnings">
+                My earnings
+              </Button>
+            </InlineStack>
+            <Text as="p" tone="subdued">
+              Tip: on Add a product you can use a photo and speak the name and
+              price.
+            </Text>
+          </BlockStack>
+        </Card>
+
         <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
           <StatCard label="Products" value={String(productCount)} />
           <StatCard
@@ -92,12 +120,16 @@ export default function VendorDashboard() {
 
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Recent orders
-            </Text>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                Recent orders
+              </Text>
+              <Link url="/vendor/orders">See all</Link>
+            </InlineStack>
             {recentOrders.length === 0 ? (
               <Text as="p" tone="subdued">
-                No orders attributed to you yet.
+                No orders for you yet. When customers buy your products, they
+                show up here.
               </Text>
             ) : (
               <ResourceList
@@ -107,7 +139,7 @@ export default function VendorDashboard() {
                   amount: formatMoney(o.subtotal, o.currency),
                 }))}
                 renderItem={(item) => (
-                  <ResourceItem id={item.id} onClick={() => undefined}>
+                  <ResourceItem id={item.id} url="/vendor/orders">
                     <Text as="span" variant="bodyMd" fontWeight="semibold">
                       {item.name}
                     </Text>
@@ -120,15 +152,6 @@ export default function VendorDashboard() {
                 )}
               />
             )}
-            <Text as="p" variant="bodySm">
-              <Link url="/vendor/products">Manage products</Link>
-              {" · "}
-              <Link url="/vendor/orders">All orders</Link>
-              {" · "}
-              <Link url="/vendor/sales">Sales report</Link>
-              {" · "}
-              <Link url="/vendor/earnings">Earnings</Link>
-            </Text>
           </BlockStack>
         </Card>
       </BlockStack>
