@@ -29,10 +29,14 @@ export default function VendorPending() {
               <strong>{vendor.status}</strong>.
             </p>
           </Banner>
+          <Text as="p" tone="subdued">
+            Shop: {vendor.shop}
+          </Text>
           {vendor.status === "pending" && (
             <Text as="p">
               The store admin will review your application. Once approved, you
-              can add products and manage inventory from this portal.
+              can add products and manage inventory from this portal. Make sure
+              you logged in with the same shop domain the admin approved.
             </Text>
           )}
           {vendor.status === "rejected" && (
