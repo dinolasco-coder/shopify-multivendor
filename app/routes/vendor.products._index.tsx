@@ -148,7 +148,18 @@ export default function VendorProducts() {
                 { title: "Actions" },
               ]}
             >
-              {rows.map((row, index) => (
+              {rows.map(
+                (
+                  row: {
+                    id: string;
+                    title: string;
+                    status: string;
+                    stock: number | string;
+                    price: string;
+                    pathId: string;
+                  },
+                  index: number,
+                ) => (
                 <IndexTable.Row id={row.id} key={row.id} position={index}>
                   <IndexTable.Cell>
                     <Text as="span" fontWeight="semibold">

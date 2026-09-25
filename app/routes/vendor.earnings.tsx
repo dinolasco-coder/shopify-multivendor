@@ -52,7 +52,7 @@ export default function VendorEarnings() {
       <BlockStack gap="400">
         <Text as="p" tone="subdued">
           Platform commission rate: {commissionPercent}%. Payouts are paid
-          manually by the store admin.
+          manually by the store admin (see history below).
         </Text>
 
         <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">

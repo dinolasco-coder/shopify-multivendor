@@ -39,7 +39,9 @@ model Vendor {
   passwordHash       String
   status             String             @default("pending") // pending | approved | rejected | suspended
   commissionPercent  Float              @default(10)
+  commissionFlat     Float              @default(0)
   shopifyCollectionId String?
+  shopifyCollectionHandle String?
   bio                String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -102,7 +104,9 @@ model AppSettings {
   id                       String   @id @default(cuid())
   shop                     String   @unique
   defaultCommissionPercent Float    @default(10)
+  defaultCommissionFlat    Float    @default(0)
   requireProductApproval   Boolean  @default(false)
+  allowPublicRegistration  Boolean  @default(true)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 }

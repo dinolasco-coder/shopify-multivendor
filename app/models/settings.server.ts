@@ -12,7 +12,9 @@ export async function updateSettings(
   shop: string,
   data: {
     defaultCommissionPercent?: number;
+    defaultCommissionFlat?: number;
     requireProductApproval?: boolean;
+    allowPublicRegistration?: boolean;
   },
 ) {
   return prisma.appSettings.upsert({
@@ -20,7 +22,9 @@ export async function updateSettings(
     create: {
       shop,
       defaultCommissionPercent: data.defaultCommissionPercent ?? 10,
+      defaultCommissionFlat: data.defaultCommissionFlat ?? 0,
       requireProductApproval: data.requireProductApproval ?? false,
+      allowPublicRegistration: data.allowPublicRegistration ?? true,
     },
     update: data,
   });

@@ -70,6 +70,15 @@ export default function VendorLayout() {
     );
   }
 
+  // Printable invoices: no portal chrome
+  if (location.pathname.startsWith("/vendor/invoice")) {
+    return (
+      <AppProvider i18n={{}}>
+        <Outlet />
+      </AppProvider>
+    );
+  }
+
   const statusTone =
     vendor.status === "approved"
       ? "success"

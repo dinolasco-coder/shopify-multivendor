@@ -11,11 +11,36 @@ type AdminGraphql = {
  */
 export async function ensureVendorCollection(
   admin: AdminGraphql,
-  vendor: { id: string; name: string; shopifyCollectionId?: string | null },
-): Promise<string | null> {
+  vendor: {
+    id: string;
+    name: string;
+    slug?: string | null;
+    shopifyCollectionId?: string | null;
+  },
+): Promise<{ id: string; handle: string } | null> {
   if (vendor.shopifyCollectionId) {
-    return vendor.shopifyCollectionId;
+    try {
+      const existing = await admin.graphql(
+        `#graphql
+        query vendorCollection($id: ID!) {
+          collection(id: $id) { id handle }
+        }`,
+        { variables: { id: vendor.shopifyCollectionId } },
+      );
+      const json = await existing.json();
+      const col = json.data?.collection;
+      if (col?.id) {
+        return { id: col.id, handle: col.handle };
+      }
+    } catch {
+      // recreate below
+    }
   }
+
+  const handleBase = `seller-${(vendor.slug || vendor.id).toLowerCase()}`.slice(
+    0,
+    50,
+  );
 
   const response = await admin.graphql(
     `#graphql
@@ -28,7 +53,8 @@ export async function ensureVendorCollection(
     {
       variables: {
         input: {
-          title: `Vendor: ${vendor.name}`,
+          title: vendor.name,
+          handle: handleBase,
           descriptionHtml: `<p>Products from ${vendor.name}</p>`,
         },
       },
@@ -41,5 +67,7 @@ export async function ensureVendorCollection(
     console.error("collectionCreate errors", errors);
     return null;
   }
-  return json.data?.collectionCreate?.collection?.id ?? null;
+  const collection = json.data?.collectionCreate?.collection;
+  if (!collection?.id) return null;
+  return { id: collection.id, handle: collection.handle };
 }
