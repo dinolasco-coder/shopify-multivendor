@@ -1,5 +1,5 @@
 ﻿import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { countVendorsByStatus } from "../models/vendor.server";
@@ -167,7 +167,7 @@ export default function Dashboard() {
               {data.pendingSellers} seller
               {data.pendingSellers === 1 ? "" : "s"} waiting for approval.
             </span>
-            <a href="/app/vendors?tab=needs_review">Review sellers</a>
+            <Link to="/app/vendors?tab=needs_review">Review sellers</Link>
           </div>
         )}
         {data.pendingProducts > 0 && (
@@ -176,29 +176,29 @@ export default function Dashboard() {
               {data.pendingProducts} product
               {data.pendingProducts === 1 ? "" : "s"} pending approval.
             </span>
-            <a href="/app/products?tab=pending">Review products</a>
+            <Link to="/app/products?tab=pending">Review products</Link>
           </div>
         )}
 
         <div className="nx-metrics">
-          <a className="nx-metric" href="/app/orders">
+          <Link className="nx-metric" to="/app/orders">
             <p className="nx-metric__label">Total revenue</p>
             <p className="nx-metric__value">
               {formatMoney(data.revenue, data.currency)}
             </p>
-          </a>
-          <a className="nx-metric" href="/app/orders">
+          </Link>
+          <Link className="nx-metric" to="/app/orders?tab=unfulfilled">
             <p className="nx-metric__label">Unfulfilled orders</p>
             <p className="nx-metric__value">{data.unfulfilledOrders}</p>
-          </a>
-          <a className="nx-metric" href="/app/vendors">
+          </Link>
+          <Link className="nx-metric" to="/app/vendors">
             <p className="nx-metric__label">Active sellers</p>
             <p className="nx-metric__value">{data.activeSellers}</p>
-          </a>
-          <a className="nx-metric" href="/app/products">
+          </Link>
+          <Link className="nx-metric" to="/app/products">
             <p className="nx-metric__label">Active products</p>
             <p className="nx-metric__value">{data.activeProducts}</p>
-          </a>
+          </Link>
         </div>
 
         <div className="nx-panel">
@@ -223,7 +223,7 @@ export default function Dashboard() {
                 portal.
               </p>
             </a>
-            <a className="nx-guide" href="/app/orders">
+            <Link className="nx-guide" to="/app/orders">
               <div className="nx-guide__thumb">
                 <div className="nx-guide__play">
                   <PlayIcon />
@@ -236,8 +236,8 @@ export default function Dashboard() {
               <p className="nx-guide__desc">
                 See how orders are attributed to the right sellers automatically.
               </p>
-            </a>
-            <a className="nx-guide" href="/app/settings">
+            </Link>
+            <Link className="nx-guide" to="/app/settings">
               <div className="nx-guide__thumb">
                 <div className="nx-guide__play">
                   <PlayIcon />
@@ -250,7 +250,7 @@ export default function Dashboard() {
               <p className="nx-guide__desc">
                 Set default commission rates and adjust them per seller.
               </p>
-            </a>
+            </Link>
           </div>
         </div>
       </div>
