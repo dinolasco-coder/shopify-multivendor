@@ -46,12 +46,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!portalShop) {
     return {
       portalShop: null as string | null,
+      sellerHint: null as string | null,
       error:
         "Vendor portal shop is not configured. Set VENDOR_PORTAL_SHOP on the server (e.g. your-store.myshopify.com).",
     };
   }
 
-  return { portalShop, error: null as string | null };
+  const sellerHint = new URL(request.url).searchParams.get("seller");
+
+  return { portalShop, sellerHint, error: null as string | null };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -117,7 +120,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function VendorLogin() {
-  const { portalShop, error: loaderError } = useLoaderData<typeof loader>();
+  const { portalShop, sellerHint, error: loaderError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -134,7 +137,9 @@ export default function VendorLogin() {
               Log in
             </Text>
             <Text as="p" tone="subdued" alignment="center">
-              Continue to your seller account
+              {sellerHint
+                ? `Sign in to open seller “${sellerHint}”`
+                : "Continue to your seller account"}
             </Text>
           </div>
 

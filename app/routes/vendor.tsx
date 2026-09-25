@@ -28,7 +28,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     path === "/vendor/login" ||
     path === "/vendor/register" ||
     path.startsWith("/vendor/login") ||
-    path.startsWith("/vendor/register")
+    path.startsWith("/vendor/register") ||
+    path.startsWith("/vendor/u/")
   ) {
     return { vendor: null, publicRoute: true };
   }

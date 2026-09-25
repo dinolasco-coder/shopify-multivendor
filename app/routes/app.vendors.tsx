@@ -9,6 +9,7 @@ import { authenticate } from "../shopify.server";
 import {
   createVendor,
   deleteVendor,
+  ensureVendorSlug,
   listVendors,
   updateVendor,
   getVendorByEmail,
@@ -22,8 +23,13 @@ import type { VendorStatus } from "../constants";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const vendors = await listVendors(session.shop);
+  for (const v of vendors) {
+    await ensureVendorSlug(v);
+  }
+  const refreshed = await listVendors(session.shop);
   const settings = await getOrCreateSettings(session.shop);
-  return { vendors, settings };
+  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+  return { vendors: refreshed, settings, appUrl };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -136,7 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function VendorsPage() {
-  const { vendors, settings } = useLoaderData<typeof loader>();
+  const { vendors, settings, appUrl } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -210,6 +216,17 @@ export default function VendorsPage() {
                   <s-paragraph>
                     {vendor.email} · Commission {vendor.commissionPercent}%
                   </s-paragraph>
+                  {vendor.slug ? (
+                    <s-paragraph>
+                      Seller portal:{" "}
+                      <s-link
+                        href={`${appUrl}/vendor/u/${vendor.slug}`}
+                        target="_blank"
+                      >
+                        {appUrl}/vendor/u/{vendor.slug}
+                      </s-link>
+                    </s-paragraph>
+                  ) : null}
 
                   <s-stack direction="inline" gap="base">
                     <Form method="post">
