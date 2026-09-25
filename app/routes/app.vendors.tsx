@@ -87,7 +87,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (existing) {
       return {
         error:
-          "A vendor with that email already exists. Use “Reset password” on their card, or Delete them first then invite again.",
+          "A vendor with that email already exists. Use “Send login info” on their card, or Delete them first then invite again.",
       };
     }
 
@@ -189,7 +189,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     return {
       ok: true,
-      message: `Password reset for ${vendor.email}. Copy the message below and send it to them.`,
+      message: `Login info ready for ${vendor.email}. Copy the message below and send it.`,
       inviteKit,
     };
   }
@@ -197,66 +197,82 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { error: "Unknown action." };
 };
 
-function InviteKitBox({ text }: { text: string }) {
+function CopyButton({
+  label,
+  text,
+  primary,
+}: {
+  label: string;
+  text: string;
+  primary?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older webviews
-      const area = document.getElementById(
-        "vendor-invite-kit",
-      ) as HTMLTextAreaElement | null;
-      area?.select();
+      const el = document.createElement("textarea");
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
       document.execCommand("copy");
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      document.body.removeChild(el);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
-    <s-box padding="base" borderWidth="base" borderRadius="base">
-      <s-stack direction="block" gap="base">
-        <s-heading>Invite message (copy &amp; send)</s-heading>
-        <s-paragraph>
-          Paste this into Messenger, SMS, or email. No email service needed.
-        </s-paragraph>
-        <textarea
-          id="vendor-invite-kit"
-          readOnly
-          value={text}
-          rows={12}
-          style={{
-            width: "100%",
-            fontFamily: "ui-monospace, monospace",
-            fontSize: "13px",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "1px solid #c9cccf",
-            resize: "vertical",
-          }}
-        />
-        <button
-          type="button"
-          onClick={copy}
-          style={{
-            alignSelf: "flex-start",
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "none",
-            background: "#1a1a1a",
-            color: "#fff",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          {copied ? "Copied!" : "Copy invite message"}
-        </button>
-      </s-stack>
-    </s-box>
+    <button
+      type="button"
+      onClick={copy}
+      style={{
+        padding: "8px 14px",
+        borderRadius: "8px",
+        border: primary ? "none" : "1px solid #c9cccf",
+        background: primary ? "#1a1a1a" : "#fff",
+        color: primary ? "#fff" : "#202223",
+        fontWeight: 600,
+        fontSize: "13px",
+        cursor: "pointer",
+      }}
+    >
+      {copied ? "Copied!" : label}
+    </button>
+  );
+}
+
+function InviteKitBox({ text }: { text: string }) {
+  return (
+    <s-section heading="Invite message — copy & send">
+      <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Paste into Messenger, SMS, or email. No email service needed.
+          </s-paragraph>
+          <textarea
+            id="vendor-invite-kit"
+            readOnly
+            value={text}
+            rows={11}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: "13px",
+              lineHeight: 1.45,
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #c9cccf",
+              background: "#fff",
+              resize: "vertical",
+            }}
+          />
+          <CopyButton label="Copy invite message" text={text} primary />
+        </s-stack>
+      </s-box>
+    </s-section>
   );
 }
 
@@ -274,166 +290,176 @@ export default function VendorsPage() {
       {actionData && "message" in actionData && actionData.message && (
         <s-banner tone="success">{actionData.message}</s-banner>
       )}
-      {actionData &&
-        "inviteKit" in actionData &&
-        actionData.inviteKit && (
-          <InviteKitBox text={actionData.inviteKit} />
-        )}
+      {actionData && "inviteKit" in actionData && actionData.inviteKit && (
+        <InviteKitBox text={actionData.inviteKit} />
+      )}
 
-      <s-section heading="Invite vendor">
+      <s-section heading="Invite a new seller">
+        <s-paragraph>
+          Create their account, then copy the invite message and send it on
+          Messenger or SMS.
+        </s-paragraph>
         <Form method="post">
           <input type="hidden" name="intent" value="invite" />
           <s-stack direction="block" gap="base">
-            <s-text-field label="Business name" name="name" required />
-            <s-email-field label="Email" name="email" required />
-            <s-password-field
-              label="Temporary password"
-              name="password"
-              required
-              details="Minimum 8 characters. After invite, copy the message and send it to the seller."
-            />
-            <s-number-field
-              label="Commission %"
-              name="commissionPercent"
-              value={String(settings.defaultCommissionPercent)}
-              min={0}
-              max={100}
-              step={0.1}
-            />
+            <s-stack direction="inline" gap="base">
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <s-text-field label="Business name" name="name" required />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <s-email-field label="Email" name="email" required />
+              </div>
+            </s-stack>
+            <s-stack direction="inline" gap="base">
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <s-password-field
+                  label="Temporary password"
+                  name="password"
+                  required
+                  details="At least 8 characters"
+                />
+              </div>
+              <div style={{ width: 140 }}>
+                <s-number-field
+                  label="Commission %"
+                  name="commissionPercent"
+                  value={String(settings.defaultCommissionPercent)}
+                  min={0}
+                  max={100}
+                  step={0.1}
+                />
+              </div>
+            </s-stack>
             <s-button type="submit" variant="primary" {...(busy ? { loading: true } : {})}>
-              Invite vendor
+              Invite seller
             </s-button>
           </s-stack>
         </Form>
       </s-section>
 
-      <s-section heading="All vendors">
+      <s-section heading={`Sellers (${vendors.length})`}>
         {vendors.length === 0 ? (
           <s-paragraph>
-            No vendors yet. Invite your first seller above, or ask them to
-            register at /vendor/register.
+            No sellers yet. Invite one above, or share /vendor/register.
           </s-paragraph>
         ) : (
           <s-stack direction="block" gap="base">
-            {vendors.map((vendor) => (
-              <s-box
-                key={vendor.id}
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-              >
-                <s-stack direction="block" gap="base">
-                  <s-stack direction="inline" gap="base">
-                    <s-heading>{vendor.name}</s-heading>
-                    <s-badge
-                      tone={
-                        vendor.status === "approved"
-                          ? "success"
-                          : vendor.status === "pending"
-                            ? "caution"
-                            : "critical"
-                      }
-                    >
-                      {vendor.status}
-                    </s-badge>
-                  </s-stack>
-                  <s-paragraph>
-                    {vendor.email} · Commission {vendor.commissionPercent}%
-                  </s-paragraph>
-                  {vendor.slug ? (
-                    <s-paragraph>
-                      Seller portal:{" "}
-                      <s-link
-                        href={`${appUrl}/vendor/u/${vendor.slug}`}
-                        target="_blank"
-                      >
-                        {appUrl}/vendor/u/{vendor.slug}
-                      </s-link>
-                    </s-paragraph>
-                  ) : null}
+            {vendors.map((vendor) => {
+              const portalUrl = vendor.slug
+                ? `${appUrl}/vendor/u/${vendor.slug}`
+                : `${appUrl}/vendor/login`;
 
-                  <s-stack direction="inline" gap="base">
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="resetPassword" />
-                      <input type="hidden" name="vendorId" value={vendor.id} />
-                      <s-button type="submit">Reset password</s-button>
-                    </Form>
-                    {vendor.status !== "approved" && (
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="setStatus" />
-                        <input type="hidden" name="vendorId" value={vendor.id} />
-                        <input type="hidden" name="status" value="approved" />
-                        <s-button type="submit" variant="primary">
-                          Approve
-                        </s-button>
-                      </Form>
-                    )}
-                    {vendor.status !== "rejected" && (
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="setStatus" />
-                        <input type="hidden" name="vendorId" value={vendor.id} />
-                        <input type="hidden" name="status" value="rejected" />
-                        <s-button type="submit" tone="critical">
-                          Reject
-                        </s-button>
-                      </Form>
-                    )}
-                    {vendor.status === "approved" && (
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="setStatus" />
-                        <input type="hidden" name="vendorId" value={vendor.id} />
-                        <input type="hidden" name="status" value="suspended" />
-                        <s-button type="submit">Suspend</s-button>
-                      </Form>
-                    )}
-                    {vendor.status === "suspended" && (
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="setStatus" />
-                        <input type="hidden" name="vendorId" value={vendor.id} />
-                        <input type="hidden" name="status" value="approved" />
-                        <s-button type="submit" variant="primary">
-                          Reinstate
-                        </s-button>
-                      </Form>
-                    )}
-                    <Form
-                      method="post"
-                      onSubmit={(event) => {
-                        if (
-                          !confirm(
-                            `Delete ${vendor.name}? Their login, sales records, and payouts for this vendor will be removed. This cannot be undone.`,
-                          )
-                        ) {
-                          event.preventDefault();
-                        }
-                      }}
-                    >
-                      <input type="hidden" name="intent" value="delete" />
-                      <input type="hidden" name="vendorId" value={vendor.id} />
-                      <s-button type="submit" tone="critical">
-                        Delete
-                      </s-button>
-                    </Form>
-                  </s-stack>
-
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="setCommission" />
-                    <input type="hidden" name="vendorId" value={vendor.id} />
+              return (
+                <s-box
+                  key={vendor.id}
+                  padding="base"
+                  borderWidth="base"
+                  borderRadius="base"
+                >
+                  <s-stack direction="block" gap="base">
                     <s-stack direction="inline" gap="base">
-                      <s-number-field
-                        label="Commission %"
-                        name="commissionPercent"
-                        value={String(vendor.commissionPercent)}
-                        min={0}
-                        max={100}
-                        step={0.1}
-                      />
-                      <s-button type="submit">Update commission</s-button>
+                      <s-heading>{vendor.name}</s-heading>
+                      <s-badge
+                        tone={
+                          vendor.status === "approved"
+                            ? "success"
+                            : vendor.status === "pending"
+                              ? "caution"
+                              : "critical"
+                        }
+                      >
+                        {vendor.status}
+                      </s-badge>
                     </s-stack>
-                  </Form>
-                </s-stack>
-              </s-box>
-            ))}
+
+                    <s-paragraph>{vendor.email}</s-paragraph>
+
+                    <s-stack direction="inline" gap="base">
+                      <CopyButton label="Copy portal link" text={portalUrl} />
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="resetPassword" />
+                        <input type="hidden" name="vendorId" value={vendor.id} />
+                        <s-button type="submit">Send login info</s-button>
+                      </Form>
+                      {vendor.status !== "approved" && (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="setStatus" />
+                          <input type="hidden" name="vendorId" value={vendor.id} />
+                          <input type="hidden" name="status" value="approved" />
+                          <s-button type="submit" variant="primary">
+                            Approve
+                          </s-button>
+                        </Form>
+                      )}
+                      {vendor.status === "approved" && (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="setStatus" />
+                          <input type="hidden" name="vendorId" value={vendor.id} />
+                          <input type="hidden" name="status" value="suspended" />
+                          <s-button type="submit">Suspend</s-button>
+                        </Form>
+                      )}
+                      {vendor.status === "suspended" && (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="setStatus" />
+                          <input type="hidden" name="vendorId" value={vendor.id} />
+                          <input type="hidden" name="status" value="approved" />
+                          <s-button type="submit" variant="primary">
+                            Reinstate
+                          </s-button>
+                        </Form>
+                      )}
+                      {vendor.status !== "rejected" && vendor.status !== "approved" && (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="setStatus" />
+                          <input type="hidden" name="vendorId" value={vendor.id} />
+                          <input type="hidden" name="status" value="rejected" />
+                          <s-button type="submit" tone="critical">
+                            Reject
+                          </s-button>
+                        </Form>
+                      )}
+                      <Form
+                        method="post"
+                        onSubmit={(event) => {
+                          if (
+                            !confirm(
+                              `Delete ${vendor.name}? This cannot be undone.`,
+                            )
+                          ) {
+                            event.preventDefault();
+                          }
+                        }}
+                      >
+                        <input type="hidden" name="intent" value="delete" />
+                        <input type="hidden" name="vendorId" value={vendor.id} />
+                        <s-button type="submit" tone="critical">
+                          Delete
+                        </s-button>
+                      </Form>
+                    </s-stack>
+
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="setCommission" />
+                      <input type="hidden" name="vendorId" value={vendor.id} />
+                      <s-stack direction="inline" gap="base">
+                        <div style={{ width: 140 }}>
+                          <s-number-field
+                            label="Commission %"
+                            name="commissionPercent"
+                            value={String(vendor.commissionPercent)}
+                            min={0}
+                            max={100}
+                            step={0.1}
+                          />
+                        </div>
+                        <s-button type="submit">Save commission</s-button>
+                      </s-stack>
+                    </Form>
+                  </s-stack>
+                </s-box>
+              );
+            })}
           </s-stack>
         )}
       </s-section>
