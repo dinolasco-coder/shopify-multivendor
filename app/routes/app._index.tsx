@@ -38,7 +38,7 @@ export default function Dashboard() {
       <s-section heading="Overview">
         <s-paragraph>
           Manage vendors, products, and commission from one place. Customers
-          shop normally on your Online Store ΓÇö products from multiple vendors
+          shop normally on your Online Store - products from multiple vendors
           share a single Shopify cart and checkout.
         </s-paragraph>
         <s-stack direction="inline" gap="base">
@@ -82,7 +82,7 @@ export default function Dashboard() {
             </s-text>
           </s-paragraph>
           <s-paragraph>
-            Default commission: {settings.defaultCommissionPercent}% ┬╖ Product
+            Default commission: {settings.defaultCommissionPercent}% - Product
             approval{" "}
             {settings.requireProductApproval ? "required" : "not required"}
           </s-paragraph>
