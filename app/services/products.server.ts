@@ -454,6 +454,7 @@ async function setInventoryQuantity(
           id
           name
           isActive
+          isPrimary
           fulfillsOnlineOrders
         }
       }
@@ -464,23 +465,35 @@ async function setInventoryQuantity(
     id: string;
     name?: string;
     isActive?: boolean;
+    isPrimary?: boolean;
     fulfillsOnlineOrders?: boolean;
   }> = locJson.data?.locations?.nodes ?? [];
 
-  // Online-fulfillment locations only. Stock must live on ONE location —
-  // setting the same qty on every location doubles/triples storefront "in stock".
-  let onlineLocations = locations.filter(
-    (l) => l.isActive !== false && l.fulfillsOnlineOrders,
-  );
-  if (!onlineLocations.length) {
-    onlineLocations = locations.filter((l) => l.isActive !== false);
-  }
-  if (!onlineLocations.length && locations[0]) {
-    onlineLocations = [locations[0]];
-  }
-  if (!onlineLocations.length) return;
+  const active = locations.filter((l) => l.isActive !== false);
+  const preferredName = (process.env.VENDOR_INVENTORY_LOCATION_NAME || "")
+    .trim()
+    .toLowerCase();
+  const preferredId = (process.env.VENDOR_INVENTORY_LOCATION_ID || "").trim();
 
-  const primary = onlineLocations[0];
+  // Prefer the shop location that actually ships / fulfills online.
+  // Wrong location = checkout "not available for delivery" even with stock.
+  let primary =
+    (preferredId && active.find((l) => l.id === preferredId)) ||
+    (preferredName &&
+      active.find((l) => (l.name || "").toLowerCase().includes(preferredName))) ||
+    active.find((l) => l.isPrimary && l.fulfillsOnlineOrders) ||
+    active.find((l) => l.fulfillsOnlineOrders) ||
+    active.find((l) => l.isPrimary) ||
+    active[0] ||
+    locations[0];
+
+  if (!primary) return;
+
+  const onlineLocations = active.filter((l) => l.fulfillsOnlineOrders);
+  const manageIds = new Set<string>([
+    primary.id,
+    ...onlineLocations.map((l) => l.id),
+  ]);
 
   // Locations where this item is already stocked (may include prior buggy doubles).
   const levelsResponse = await admin.graphql(
@@ -500,9 +513,9 @@ async function setInventoryQuantity(
   const stockedLocationIds = new Set<string>(
     (
       levelsJson.data?.inventoryItem?.inventoryLevels?.nodes ?? []
-    ).map(
-      (n: { location?: { id?: string } }) => n.location?.id,
-    ).filter(Boolean) as string[],
+    )
+      .map((n: { location?: { id?: string } }) => n.location?.id)
+      .filter(Boolean) as string[],
   );
 
   await admin.graphql(
@@ -520,7 +533,7 @@ async function setInventoryQuantity(
     },
   );
 
-  // Activate only the primary location with the intended quantity.
+  // Activate the shop/primary location with the intended quantity.
   const activateResponse = await admin.graphql(
     `#graphql
     mutation marketplaceActivateInventory(
@@ -558,17 +571,17 @@ async function setInventoryQuantity(
     );
   }
 
-  // Put all sellable stock on primary; zero other online-fulfillment
-  // locations that already have stock (fixes prior double-counting).
-  const onlineIds = new Set(onlineLocations.map((l) => l.id));
+  // Put all sellable stock on primary shop location; zero other online
+  // locations so totals stay accurate and checkout can fulfill.
   const quantities = [
     {
       inventoryItemId,
       locationId: primary.id,
       quantity,
     },
-    ...[...stockedLocationIds]
-      .filter((id) => id !== primary.id && onlineIds.has(id))
+    ...[...manageIds, ...stockedLocationIds]
+      .filter((id) => id !== primary.id)
+      .filter((id, index, arr) => arr.indexOf(id) === index)
       .map((locationId) => ({
         inventoryItemId,
         locationId,
