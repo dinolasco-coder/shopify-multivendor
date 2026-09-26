@@ -65,11 +65,14 @@ export async function createVendorProduct(
 
   const variant = product.variants?.nodes?.[0];
   if (variant?.id) {
-    await admin.graphql(
+    const priceResponse = await admin.graphql(
       `#graphql
       mutation marketplaceVariantUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
         productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-          productVariants { id price }
+          productVariants {
+            id
+            inventoryItem { id }
+          }
           userErrors { field message }
         }
       }`,
@@ -80,16 +83,45 @@ export async function createVendorProduct(
             {
               id: variant.id,
               price: input.price,
+              inventoryItem: { tracked: true },
             },
           ],
         },
       },
     );
+    const priceJson = await priceResponse.json();
+    const priceErrors =
+      priceJson.data?.productVariantsBulkUpdate?.userErrors ?? [];
+    if (priceErrors.length) {
+      throw new Error(
+        priceErrors.map((e: { message: string }) => e.message).join(", "),
+      );
+    }
 
-    if (variant.inventoryItem?.id && input.inventoryQuantity >= 0) {
+    let inventoryItemId =
+      priceJson.data?.productVariantsBulkUpdate?.productVariants?.[0]
+        ?.inventoryItem?.id ||
+      variant.inventoryItem?.id ||
+      null;
+
+    if (!inventoryItemId) {
+      inventoryItemId = await getInventoryItemId(
+        admin,
+        product.id,
+        variant.id,
+      );
+    }
+
+    if (!inventoryItemId) {
+      throw new Error(
+        "Product was created but Shopify did not return an inventory item. Open the product in Admin and try Edit → Shop location quantity.",
+      );
+    }
+
+    if (input.inventoryQuantity >= 0) {
       await setInventoryQuantity(
         admin,
-        variant.inventoryItem.id,
+        inventoryItemId,
         input.inventoryQuantity,
       );
     }
@@ -486,14 +518,24 @@ async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
   }> = locJson.data?.locations?.nodes ?? [];
   const active = locations.filter((l) => l.isActive !== false);
   const defaultLocation = locJson.data?.defaultLocation as
-    | { id: string; name?: string; isActive?: boolean; fulfillsOnlineOrders?: boolean }
+    | {
+        id: string;
+        name?: string;
+        isActive?: boolean;
+        fulfillsOnlineOrders?: boolean;
+      }
     | null
     | undefined;
 
+  const nameIncludes = (l: { name?: string }, needle: string) =>
+    (l.name || "").toLowerCase().includes(needle);
+
+  // Prefer the merchant's "Shop" location (what checkout uses), then default.
   const primary =
     (preferredId && active.find((l) => l.id === preferredId)) ||
-    (preferredName &&
-      active.find((l) => (l.name || "").toLowerCase().includes(preferredName))) ||
+    (preferredName && active.find((l) => nameIncludes(l, preferredName))) ||
+    active.find((l) => nameIncludes(l, "shop") && l.fulfillsOnlineOrders) ||
+    active.find((l) => nameIncludes(l, "shop")) ||
     (defaultLocation?.isActive !== false &&
       defaultLocation?.fulfillsOnlineOrders &&
       defaultLocation) ||
@@ -510,22 +552,57 @@ async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
   return primary;
 }
 
+async function getInventoryItemId(
+  admin: AdminGraphql,
+  productId: string,
+  variantId?: string,
+): Promise<string | null> {
+  const response = await admin.graphql(
+    `#graphql
+    query marketplaceVariantInventory($id: ID!) {
+      product(id: $id) {
+        variants(first: 10) {
+          nodes {
+            id
+            inventoryItem { id tracked }
+          }
+        }
+      }
+    }`,
+    { variables: { id: productId } },
+  );
+  const json = await response.json();
+  const nodes: Array<{
+    id?: string;
+    inventoryItem?: { id?: string } | null;
+  }> = json.data?.product?.variants?.nodes ?? [];
+  const match = variantId
+    ? nodes.find((n) => n.id === variantId)
+    : nodes[0];
+  return match?.inventoryItem?.id ?? nodes[0]?.inventoryItem?.id ?? null;
+}
+
 async function setInventoryQuantity(
   admin: AdminGraphql,
   inventoryItemId: string,
   quantity: number,
 ) {
   const primary = await resolveInventoryLocation(admin);
+  const qty = Math.max(0, Math.floor(quantity));
 
-  // Only locations where this item is already stocked — never set qty on
-  // unactivated locations (that fails the whole mutation and leaves stock at 0).
   const levelsResponse = await admin.graphql(
     `#graphql
     query marketplaceInventoryLevels($id: ID!) {
       inventoryItem(id: $id) {
+        id
+        tracked
         inventoryLevels(first: 20) {
           nodes {
-            location { id }
+            location { id name }
+            quantities(names: ["available", "on_hand"]) {
+              name
+              quantity
+            }
           }
         }
       }
@@ -538,6 +615,7 @@ async function setInventoryQuantity(
       levelsJson.errors.map((e: { message: string }) => e.message).join(", "),
     );
   }
+
   const stockedLocationIds = new Set<string>(
     (
       levelsJson.data?.inventoryItem?.inventoryLevels?.nodes ?? []
@@ -569,21 +647,18 @@ async function setInventoryQuantity(
     );
   }
 
-  // Activate location only if this item is not stocked there yet.
-  // Passing `available` on an already-active location returns:
-  // "Not allowed to set available quantity when the item is already active..."
+  // Activate at shop location without setting qty (qty set below).
+  // Passing `available` fails when the item is already active there.
   if (!stockedLocationIds.has(primary.id)) {
     const activateResponse = await admin.graphql(
       `#graphql
       mutation marketplaceActivateInventory(
         $inventoryItemId: ID!
         $locationId: ID!
-        $available: Int
       ) {
         inventoryActivate(
           inventoryItemId: $inventoryItemId
           locationId: $locationId
-          available: $available
         ) {
           userErrors { field message }
         }
@@ -592,7 +667,6 @@ async function setInventoryQuantity(
         variables: {
           inventoryItemId,
           locationId: primary.id,
-          available: quantity,
         },
       },
     );
@@ -616,39 +690,32 @@ async function setInventoryQuantity(
         activateErrors.map((e: { message: string }) => e.message).join(", "),
       );
     }
-    stockedLocationIds.add(primary.id);
   }
 
-  // Absolute set on primary; zero only locations that already stock this item.
-  const quantities = [
-    {
-      inventoryItemId,
-      locationId: primary.id,
-      quantity,
-    },
-    ...[...stockedLocationIds]
-      .filter((id) => id !== primary.id)
-      .map((locationId) => ({
-        inventoryItemId,
-        locationId,
-        quantity: 0,
-      })),
-  ];
-
+  // Set absolute quantity ONLY on the shop location (reliable for checkout).
   const setResponse = await admin.graphql(
     `#graphql
     mutation marketplaceSetInventory($input: InventorySetQuantitiesInput!) {
       inventorySetQuantities(input: $input) {
+        inventoryAdjustmentGroup {
+          changes { name delta quantityAfterChange }
+        }
         userErrors { field message code }
       }
     }`,
     {
       variables: {
         input: {
-          name: "available",
+          name: "on_hand",
           reason: "correction",
           ignoreCompareQuantity: true,
-          quantities,
+          quantities: [
+            {
+              inventoryItemId,
+              locationId: primary.id,
+              quantity: qty,
+            },
+          ],
         },
       },
     },
@@ -661,9 +728,45 @@ async function setInventoryQuantity(
   }
   const setErrors = setJson.data?.inventorySetQuantities?.userErrors ?? [];
   if (setErrors.length) {
-    throw new Error(
-      setErrors.map((e: { message: string }) => e.message).join(", "),
+    // Fallback: some shops reject on_hand; try available.
+    const fallback = await admin.graphql(
+      `#graphql
+      mutation marketplaceSetInventoryAvailable($input: InventorySetQuantitiesInput!) {
+        inventorySetQuantities(input: $input) {
+          userErrors { field message code }
+        }
+      }`,
+      {
+        variables: {
+          input: {
+            name: "available",
+            reason: "correction",
+            ignoreCompareQuantity: true,
+            quantities: [
+              {
+                inventoryItemId,
+                locationId: primary.id,
+                quantity: qty,
+              },
+            ],
+          },
+        },
+      },
     );
+    const fallbackJson = await fallback.json();
+    const fallbackErrors =
+      fallbackJson.data?.inventorySetQuantities?.userErrors ?? [];
+    if (fallbackJson.errors?.length || fallbackErrors.length) {
+      throw new Error(
+        [
+          ...setErrors.map((e: { message: string }) => e.message),
+          ...(fallbackJson.errors ?? []).map(
+            (e: { message: string }) => e.message,
+          ),
+          ...fallbackErrors.map((e: { message: string }) => e.message),
+        ].join(", "),
+      );
+    }
   }
 }
 
