@@ -94,11 +94,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       variantId: variant?.id,
       inventoryItemId: variant?.inventoryItem?.id,
       inventoryQuantity: Number.isFinite(inventoryQuantity)
-        ? inventoryQuantity
+        ? Math.max(0, Math.floor(inventoryQuantity))
         : undefined,
     });
 
-    return { ok: true, message: "Product updated." };
+    // Reload list so stock column reflects the new quantity.
+    throw redirect("/vendor/products");
   } catch (error) {
     if (error instanceof Response) throw error;
     return {
