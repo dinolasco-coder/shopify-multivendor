@@ -169,11 +169,12 @@ export default function EditVendorProduct() {
                   autoComplete="off"
                 />
                 <TextField
-                  label="Inventory quantity"
+                  label="Shop location quantity"
                   type="number"
                   value={inventoryQuantity}
                   onChange={setInventoryQuantity}
                   autoComplete="off"
+                  helpText="Stock counted at your shop location for online orders."
                 />
               </FormLayout.Group>
               <Select

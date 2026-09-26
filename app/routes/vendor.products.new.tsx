@@ -659,7 +659,7 @@ export default function VendorAddProduct() {
                       </div>
                       <div>
                         <Text as="p" tone="subdued" variant="bodyMd">
-                          How many
+                          Shop location quantity
                         </Text>
                         <Text as="p" variant="headingMd">
                           {inventoryQuantity || "1"} piece
@@ -819,7 +819,7 @@ export default function VendorAddProduct() {
                     <strong>Price:</strong> “250 pesos”
                   </Text>
                   <Text as="p" variant="bodyLg">
-                    <strong>How many:</strong> “3 pieces” (optional)
+                    <strong>Shop quantity:</strong> “3 pieces” (optional)
                   </Text>
                 </BlockStack>
               </div>
@@ -916,8 +916,8 @@ export default function VendorAddProduct() {
 
           <Step
             number={4}
-            title="How many do you have? (optional)"
-            hint="Speak, type, or use + and −. If you skip, we use 1."
+            title="Shop location quantity (optional)"
+            hint="How many pieces are ready at the shop location. Speak, type, or use + and −. If you skip, we use 1."
             locked={!hasPhoto}
           >
             <BlockStack gap="300">
@@ -934,7 +934,7 @@ export default function VendorAddProduct() {
               >
                 {listeningFor === "quantity"
                   ? "Listening… tap to stop"
-                  : "Tap and say how many"}
+                  : "Tap and say how many at the shop"}
               </Button>
               <InlineStack gap="300" blockAlign="center">
                 <Button
@@ -946,7 +946,7 @@ export default function VendorAddProduct() {
                 </Button>
                 <div style={{ flex: 1, minWidth: 100 }}>
                   <TextField
-                    label="How many"
+                    label="Shop location quantity"
                     labelHidden
                     type="text"
                     inputMode="numeric"
@@ -1079,8 +1079,8 @@ export default function VendorAddProduct() {
 
               <Step
                 number={3}
-                title="How many"
-                hint="Use + and − if that is easier"
+                title="Shop location quantity"
+                hint="Pieces ready at the shop. Use + and − if that is easier."
               >
                 <InlineStack gap="300" blockAlign="center">
                   <Button size="large" onClick={() => bumpQty(-1)}>
@@ -1088,7 +1088,7 @@ export default function VendorAddProduct() {
                   </Button>
                   <div style={{ flex: 1, minWidth: 100 }}>
                     <TextField
-                      label="Quantity"
+                      label="Shop location quantity"
                       labelHidden
                       type="text"
                       inputMode="numeric"
