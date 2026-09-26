@@ -569,45 +569,54 @@ async function setInventoryQuantity(
     );
   }
 
-  // Activate shop location (sets qty when newly activated).
-  const activateResponse = await admin.graphql(
-    `#graphql
-    mutation marketplaceActivateInventory(
-      $inventoryItemId: ID!
-      $locationId: ID!
-      $available: Int
-    ) {
-      inventoryActivate(
-        inventoryItemId: $inventoryItemId
-        locationId: $locationId
-        available: $available
+  // Activate location only if this item is not stocked there yet.
+  // Passing `available` on an already-active location returns:
+  // "Not allowed to set available quantity when the item is already active..."
+  if (!stockedLocationIds.has(primary.id)) {
+    const activateResponse = await admin.graphql(
+      `#graphql
+      mutation marketplaceActivateInventory(
+        $inventoryItemId: ID!
+        $locationId: ID!
+        $available: Int
       ) {
-        userErrors { field message }
-      }
-    }`,
-    {
-      variables: {
-        inventoryItemId,
-        locationId: primary.id,
-        available: quantity,
+        inventoryActivate(
+          inventoryItemId: $inventoryItemId
+          locationId: $locationId
+          available: $available
+        ) {
+          userErrors { field message }
+        }
+      }`,
+      {
+        variables: {
+          inventoryItemId,
+          locationId: primary.id,
+          available: quantity,
+        },
       },
-    },
-  );
-  const activateJson = await activateResponse.json();
-  if (activateJson.errors?.length) {
-    throw new Error(
-      activateJson.errors.map((e: { message: string }) => e.message).join(", "),
     );
-  }
-  const activateErrors =
-    activateJson.data?.inventoryActivate?.userErrors ?? [];
-  const alreadyActive = activateErrors.some((e: { message?: string }) =>
-    /already.?stocked|already.?activated/i.test(e.message ?? ""),
-  );
-  if (activateErrors.length && !alreadyActive) {
-    throw new Error(
-      activateErrors.map((e: { message: string }) => e.message).join(", "),
+    const activateJson = await activateResponse.json();
+    if (activateJson.errors?.length) {
+      throw new Error(
+        activateJson.errors
+          .map((e: { message: string }) => e.message)
+          .join(", "),
+      );
+    }
+    const activateErrors =
+      activateJson.data?.inventoryActivate?.userErrors ?? [];
+    const alreadyActive = activateErrors.some((e: { message?: string }) =>
+      /already.?stocked|already.?activated|already active|not allowed to set available/i.test(
+        e.message ?? "",
+      ),
     );
+    if (activateErrors.length && !alreadyActive) {
+      throw new Error(
+        activateErrors.map((e: { message: string }) => e.message).join(", "),
+      );
+    }
+    stockedLocationIds.add(primary.id);
   }
 
   // Absolute set on primary; zero only locations that already stock this item.
