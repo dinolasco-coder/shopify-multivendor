@@ -110,30 +110,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 const styles = `
   .nx-home { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; }
-  .nx-welcome { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
-  .nx-lead { margin: 0 0 20px; color: #6d7175; font-size: 15px; line-height: 1.45; }
-  .nx-doors {
-    display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin-bottom: 20px;
-  }
-  .nx-door {
-    display: flex; flex-direction: column; gap: 10px;
-    background: #fff; border: 1px solid #e4e5e7; border-radius: 14px; padding: 22px;
-  }
-  .nx-door--seller {
-    background: #1a1a1a; border-color: #1a1a1a; color: #fff;
-  }
-  .nx-door__kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
-  .nx-door__title { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.02em; }
-  .nx-door__text { margin: 0; font-size: 14px; line-height: 1.45; opacity: 0.85; }
-  .nx-door__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
-  .nx-btn {
-    border: 1px solid #c9cccf; background: #1a1a1a; color: #fff; border-radius: 8px;
-    padding: 11px 14px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none;
-    display: inline-flex; align-items: center;
-  }
-  .nx-btn--ghost { background: #fff; color: #202223; }
-  .nx-btn--on-dark { background: #fff; color: #1a1a1a; border-color: #fff; }
-  .nx-btn--on-dark-ghost { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
+  .nx-welcome { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 20px; }
   .nx-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
   .nx-metric {
     background: #fff; border: 1px solid #e4e5e7; border-radius: 12px;
@@ -168,6 +145,11 @@ const styles = `
     flex: 1; min-width: 180px; font-size: 12px; background: #f6f6f7; border: 1px solid #e4e5e7;
     border-radius: 8px; padding: 10px 12px; word-break: break-all;
   }
+  .nx-btn {
+    border: 1px solid #c9cccf; background: #1a1a1a; color: #fff; border-radius: 8px;
+    padding: 9px 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+  }
+  .nx-btn--ghost { background: #fff; color: #202223; }
   .nx-banner {
     margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; font-size: 14px;
     display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap;
@@ -176,7 +158,6 @@ const styles = `
   .nx-banner.info { background: #eaf4ff; color: #004299; }
   .nx-banner a { color: inherit; font-weight: 700; }
   @media (max-width: 900px) {
-    .nx-doors { grid-template-columns: 1fr; }
     .nx-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .nx-grid { grid-template-columns: 1fr; }
     .nx-actions { grid-template-columns: 1fr; }
@@ -209,66 +190,12 @@ function CopyPortalButton({ url }: { url: string }) {
 export default function Dashboard() {
   const data = useLoaderData<typeof loader>();
   const welcomeName = data.shopName || "there";
-  const registerUrl = data.vendorPortalUrl.replace(/\/login\/?$/, "/register");
 
   return (
-    <s-page heading="Marketplace portal">
+    <s-page heading="Home">
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="nx-home">
-        <h1 className="nx-welcome">Marketplace portal</h1>
-        <p className="nx-lead">
-          Welcome {welcomeName}. Choose seller portal or continue with admin
-          tools below.
-        </p>
-
-        <div className="nx-doors">
-          <div className="nx-door nx-door--seller">
-            <p className="nx-door__kicker">For sellers</p>
-            <h2 className="nx-door__title">Seller portal</h2>
-            <p className="nx-door__text">
-              Sellers log in here to add products, check orders, and see
-              earnings. Opens in a new tab (outside Shopify Admin).
-            </p>
-            <div className="nx-door__actions">
-              <a
-                className="nx-btn nx-btn--on-dark"
-                href={data.vendorPortalUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open seller login
-              </a>
-              <a
-                className="nx-btn nx-btn--on-dark-ghost"
-                href={registerUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Seller register
-              </a>
-            </div>
-          </div>
-
-          <div className="nx-door">
-            <p className="nx-door__kicker">For you (store owner)</p>
-            <h2 className="nx-door__title">Admin portal</h2>
-            <p className="nx-door__text">
-              Approve sellers, review products, split orders, and record
-              payouts — stays inside this Multivendor app.
-            </p>
-            <div className="nx-door__actions">
-              <Link className="nx-btn" to="/app/vendors">
-                Manage sellers
-              </Link>
-              <Link className="nx-btn nx-btn--ghost" to="/app/products">
-                Products
-              </Link>
-              <Link className="nx-btn nx-btn--ghost" to="/app/orders">
-                Orders
-              </Link>
-            </div>
-          </div>
-        </div>
+        <h1 className="nx-welcome">Welcome {welcomeName}!</h1>
 
         {data.pendingSellers > 0 && (
           <div className="nx-banner warn">
@@ -373,9 +300,9 @@ export default function Dashboard() {
         </div>
 
         <div className="nx-panel">
-          <h2 className="nx-panel__title">Share seller portal link</h2>
+          <h2 className="nx-panel__title">Seller portal link</h2>
           <p className="nx-panel__sub">
-            Send this to sellers, or use the invite kit on the Sellers page.
+            Share this with sellers, or use the invite kit on the Sellers page.
           </p>
           <div className="nx-portal">
             <code>{data.vendorPortalUrl}</code>
