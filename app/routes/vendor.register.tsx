@@ -50,27 +50,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!portalShop) {
     return {
       portalShop: null as string | null,
-      registrationOpen: false,
       error:
         "Vendor portal shop is not configured. Set VENDOR_PORTAL_SHOP on the server (e.g. your-store.myshopify.com).",
     };
   }
 
-  const settings = await getOrCreateSettings(portalShop);
-  if (!settings.allowPublicRegistration) {
-    return {
-      portalShop,
-      registrationOpen: false,
-      error:
-        "Public seller registration is turned off. Ask the store admin for an invite.",
-    };
-  }
-
-  return {
-    portalShop,
-    registrationOpen: true,
-    error: null as string | null,
-  };
+  return { portalShop, error: null as string | null };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -120,20 +105,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const settings = await getOrCreateSettings(portalShop);
-  if (!settings.allowPublicRegistration) {
-    return {
-      error:
-        "Public seller registration is turned off. Ask the store admin for an invite.",
-    };
-  }
-
   const vendor = await createVendor({
     shop: portalShop,
     name,
     email,
     passwordHash: hashPassword(password),
     commissionPercent: settings.defaultCommissionPercent,
-    commissionFlat: settings.defaultCommissionFlat ?? 0,
     status: "pending",
   });
 
@@ -146,18 +123,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function VendorRegister() {
-  const {
-    portalShop,
-    registrationOpen,
-    error: loaderError,
-  } = useLoaderData<typeof loader>();
+  const { portalShop, error: loaderError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const blocked = !registrationOpen || Boolean(loaderError);
 
   return (
     <VendorAuthShell>
@@ -194,7 +166,7 @@ export default function VendorRegister() {
                 onChange={setName}
                 autoComplete="organization"
                 placeholder="Your business name"
-                disabled={blocked}
+                disabled={!portalShop}
               />
               <TextField
                 label="Email"
@@ -203,7 +175,7 @@ export default function VendorRegister() {
                 onChange={setEmail}
                 autoComplete="email"
                 placeholder="Email"
-                disabled={blocked}
+                disabled={!portalShop}
               />
               <TextField
                 label="Password"
@@ -213,7 +185,7 @@ export default function VendorRegister() {
                 autoComplete="new-password"
                 placeholder="Password"
                 helpText="At least 8 characters"
-                disabled={blocked}
+                disabled={!portalShop}
               />
               <Button
                 submit
@@ -222,7 +194,7 @@ export default function VendorRegister() {
                 fullWidth
                 loading={busy}
                 disabled={
-                  blocked ||
+                  !portalShop ||
                   Boolean(actionData && "locked" in actionData && actionData.locked)
                 }
               >

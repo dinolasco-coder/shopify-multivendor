@@ -94,12 +94,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       variantId: variant?.id,
       inventoryItemId: variant?.inventoryItem?.id,
       inventoryQuantity: Number.isFinite(inventoryQuantity)
-        ? Math.max(0, Math.floor(inventoryQuantity))
+        ? inventoryQuantity
         : undefined,
     });
 
-    // Reload list so stock column reflects the new quantity.
-    throw redirect("/vendor/products");
+    return { ok: true, message: "Product updated." };
   } catch (error) {
     if (error instanceof Response) throw error;
     return {
@@ -169,12 +168,11 @@ export default function EditVendorProduct() {
                   autoComplete="off"
                 />
                 <TextField
-                  label="Shop location quantity"
+                  label="Inventory quantity"
                   type="number"
                   value={inventoryQuantity}
                   onChange={setInventoryQuantity}
                   autoComplete="off"
-                  helpText="Stock counted at your shop location for online orders."
                 />
               </FormLayout.Group>
               <Select

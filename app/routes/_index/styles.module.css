@@ -1,189 +1,73 @@
-.page {
-  min-height: 100vh;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, #e8eef5 0%, transparent 55%),
-    #f6f6f7;
-  color: #1a1a1a;
-  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-}
-
-.header {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 28px 24px 0;
-}
-
-.brand {
-  display: flex;
+.index {
   align-items: center;
-  gap: 12px;
-}
-
-.brandMark {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: #1a1a1a;
-  color: #fff;
   display: flex;
-  align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 18px;
+  height: 100%;
+  width: 100%;
+  text-align: center;
+  padding: 1rem;
 }
 
-.brandName {
+.heading,
+.text {
+  padding: 0;
   margin: 0;
-  font-weight: 700;
-  font-size: 16px;
 }
 
-.brandSub {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: #6d7175;
+.text {
+  font-size: 1.2rem;
+  padding-bottom: 2rem;
 }
 
-.main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 48px 24px 64px;
-}
-
-.hero {
-  margin-bottom: 36px;
-}
-
-.eyebrow {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #6d7175;
-}
-
-.heading {
-  margin: 0 0 12px;
-  font-size: clamp(2rem, 4vw, 2.75rem);
-  font-weight: 750;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-}
-
-.lead {
-  margin: 0;
-  max-width: 36rem;
-  font-size: 1.125rem;
-  line-height: 1.5;
-  color: #4a4d50;
-}
-
-.cards {
+.content {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.card {
-  background: #fff;
-  border: 1px solid #e4e5e7;
-  border-radius: 16px;
-  padding: 28px 24px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.cardTitle {
-  margin: 0 0 8px;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.cardText {
-  margin: 0 0 20px;
-  font-size: 0.95rem;
-  line-height: 1.45;
-  color: #6d7175;
-}
-
-.cardActions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.btnPrimary,
-.btnGhost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  padding: 14px 18px;
-  font-size: 15px;
-  font-weight: 700;
-  text-decoration: none;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.btnPrimary {
-  background: #1a1a1a;
-  color: #fff;
-  border-color: #1a1a1a;
-}
-
-.btnGhost {
-  background: #fff;
-  color: #202223;
-  border-color: #c9cccf;
+  gap: 2rem;
 }
 
 .form {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0 auto;
+  gap: 1rem;
 }
 
 .label {
   display: grid;
-  gap: 6px;
+  gap: 0.2rem;
+  max-width: 20rem;
   text-align: left;
-  font-size: 13px;
-  font-weight: 600;
-  color: #4a4d50;
+  font-size: 1rem;
 }
 
 .input {
-  padding: 12px 14px;
-  border: 1px solid #c9cccf;
-  border-radius: 10px;
-  font-size: 15px;
+  padding: 0.4rem;
 }
 
-.hint {
+.button {
+  padding: 0.4rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  padding-top: 3rem;
   margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.45;
-  color: #6d7175;
+  display: flex;
+  gap: 2rem;
 }
 
-.footerNote {
-  margin: 28px 0 0;
-  text-align: center;
-  font-size: 14px;
-  color: #6d7175;
+.list > li {
+  max-width: 20rem;
+  text-align: left;
 }
 
-.inlineLink {
-  color: #1a1a1a;
-  font-weight: 700;
-}
-
-@media (max-width: 720px) {
-  .cards {
-    grid-template-columns: 1fr;
+@media only screen and (max-width: 50rem) {
+  .list {
+    display: block;
   }
 
-  .main {
-    padding-top: 32px;
+  .list > li {
+    padding-bottom: 1rem;
   }
 }

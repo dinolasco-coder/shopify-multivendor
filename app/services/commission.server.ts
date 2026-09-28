@@ -95,12 +95,8 @@ export async function attributeOrderFromWebhook(
     const vendor = await getVendorById(vendorId);
     if (!vendor || vendor.shop !== shop) continue;
 
-    const commissionPercent =
-      Math.round(bucket.subtotal * (vendor.commissionPercent / 100) * 100) /
-      100;
-    const flat = Number(vendor.commissionFlat || 0);
     const commissionAmount =
-      Math.round((commissionPercent + (Number.isFinite(flat) ? flat : 0)) * 100) /
+      Math.round(bucket.subtotal * (vendor.commissionPercent / 100) * 100) /
       100;
 
     attributions.push({
