@@ -195,7 +195,11 @@ export default function Dashboard() {
     <s-page heading="Home">
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="nx-home">
-        <h1 className="nx-welcome">Welcome {welcomeName}!</h1>
+        <h1 className="nx-welcome">Marketplace portal</h1>
+        <p style={{ margin: "-8px 0 20px", color: "#6d7175", fontSize: 15 }}>
+          Welcome {welcomeName}. Manage sellers, products, orders, and payouts
+          here — or open the seller portal for vendors.
+        </p>
 
         {data.pendingSellers > 0 && (
           <div className="nx-banner warn">
