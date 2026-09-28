@@ -71,6 +71,7 @@ export async function createVendor(data: {
   email: string;
   passwordHash: string;
   commissionPercent?: number;
+  commissionFlat?: number;
   status?: VendorStatus;
 }) {
   const slug = await allocateVendorSlug(data.shop, data.name);
@@ -82,6 +83,7 @@ export async function createVendor(data: {
       email: data.email.toLowerCase(),
       passwordHash: data.passwordHash,
       commissionPercent: data.commissionPercent ?? 10,
+      commissionFlat: data.commissionFlat ?? 0,
       status: data.status ?? "pending",
     },
   });
@@ -93,7 +95,9 @@ export async function updateVendor(
     name?: string;
     status?: VendorStatus;
     commissionPercent?: number;
+    commissionFlat?: number;
     shopifyCollectionId?: string | null;
+    shopifyCollectionHandle?: string | null;
     bio?: string | null;
     passwordHash?: string;
     slug?: string;
