@@ -12,6 +12,7 @@ type OrderStatusMap = Record<
     fulfillment: string;
     financial: string;
     adminUrl: string;
+    imagesByLineId: Record<string, string>;
   }
 >;
 
@@ -39,6 +40,12 @@ async function fetchOrderStatuses(
               id
               displayFulfillmentStatus
               displayFinancialStatus
+              lineItems(first: 50) {
+                nodes {
+                  id
+                  image { url }
+                }
+              }
             }
           }`,
           { variables: { id } },
@@ -47,10 +54,17 @@ async function fetchOrderStatuses(
         const order = json.data?.order;
         if (!order) return;
         const numeric = String(order.id).split("/").pop();
+        const imagesByLineId: Record<string, string> = {};
+        for (const li of order.lineItems?.nodes ?? []) {
+          if (li?.id && li?.image?.url) {
+            imagesByLineId[li.id] = li.image.url;
+          }
+        }
         map[id] = {
           fulfillment: order.displayFulfillmentStatus || "UNFULFILLED",
           financial: order.displayFinancialStatus || "PENDING",
           adminUrl: `https://admin.shopify.com/store/${shopHandle}/orders/${numeric}`,
+          imagesByLineId,
         };
       } catch (error) {
         console.error("vendor order status failed", id, error);
@@ -165,26 +179,80 @@ export default function VendorOrders() {
               <tbody>
                 {filtered.map((order) => {
                   const items = JSON.parse(order.lineItemsJson || "[]") as Array<{
+                    id?: string;
                     title: string;
                     quantity: number;
+                    imageUrl?: string | null;
                   }>;
                   const status = statuses[order.shopifyOrderId];
                   const fulfillment = status?.fulfillment || "UNFULFILLED";
                   const financial = status?.financial || "PENDING";
+                  const enrichedItems = items.map((item) => ({
+                    ...item,
+                    imageUrl:
+                      item.imageUrl ||
+                      (item.id ? status?.imagesByLineId?.[item.id] : null) ||
+                      null,
+                  }));
                   return (
                     <tr key={order.id}>
                       <td>
-                        <p className="sx-primary">
-                          {order.shopifyOrderName || order.shopifyOrderId}
-                        </p>
-                        <p className="sx-secondary">
-                          {new Date(order.createdAt).toLocaleString()}
-                        </p>
-                        <p className="sx-secondary">
-                          {items
-                            .map((i) => `${i.title} × ${i.quantity}`)
-                            .join(" · ")}
-                        </p>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 12,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {enrichedItems.slice(0, 3).map((item, idx) =>
+                              item.imageUrl ? (
+                                <img
+                                  key={idx}
+                                  src={item.imageUrl}
+                                  alt=""
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 8,
+                                    objectFit: "cover",
+                                    border: "1px solid #e4e5e7",
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 8,
+                                    background: "#f1f2f3",
+                                    border: "1px solid #e4e5e7",
+                                  }}
+                                />
+                              ),
+                            )}
+                          </div>
+                          <div>
+                            <p className="sx-primary">
+                              {order.shopifyOrderName || order.shopifyOrderId}
+                            </p>
+                            <p className="sx-secondary">
+                              {new Date(order.createdAt).toLocaleString()}
+                            </p>
+                            <p className="sx-secondary">
+                              {enrichedItems
+                                .map((i) => `${i.title} × ${i.quantity}`)
+                                .join(" · ")}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                       <td>
                         <p className="sx-primary">

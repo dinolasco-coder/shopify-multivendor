@@ -19,6 +19,8 @@ type ShopifyWebhookLineItem = {
   quantity?: number;
   price?: string;
   admin_graphql_api_id?: string;
+  /** Optional — set when syncing via Admin GraphQL */
+  image_url?: string | null;
 };
 
 type ShopifyWebhookOrder = {
@@ -34,6 +36,14 @@ function money(value: string | number | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+type LineItemSnapshot = {
+  id: string;
+  title: string;
+  quantity: number;
+  price: number;
+  imageUrl?: string | null;
+};
+
 export async function attributeOrderFromWebhook(
   shop: string,
   order: ShopifyWebhookOrder,
@@ -46,35 +56,40 @@ export async function attributeOrderFromWebhook(
     order.admin_graphql_api_id || `gid://shopify/Order/${order.id}`;
   const currency = order.currency || "USD";
 
-  // Group line items by product, then resolve vendor metafield
+  // Group line items by product, then resolve vendor metafield + image
   const byVendor = new Map<
     string,
     {
       lineItemIds: string[];
-      lineItems: Array<{
-        id: string;
-        title: string;
-        quantity: number;
-        price: number;
-      }>;
+      lineItems: LineItemSnapshot[];
       subtotal: number;
     }
+  >();
+
+  const productCache = new Map<
+    string,
+    { vendorId: string | null; imageUrl: string | null }
   >();
 
   for (const item of lineItems) {
     if (!item.product_id) continue;
 
     const productGid = `gid://shopify/Product/${item.product_id}`;
-    const vendorId = await fetchProductVendorId(admin, productGid);
-    if (!vendorId) continue;
+    let meta = productCache.get(productGid);
+    if (!meta) {
+      meta = await fetchProductVendorMeta(admin, productGid);
+      productCache.set(productGid, meta);
+    }
+    if (!meta.vendorId) continue;
 
     const lineId =
       item.admin_graphql_api_id || `gid://shopify/LineItem/${item.id}`;
     const qty = item.quantity ?? 1;
     const price = money(item.price);
     const lineTotal = qty * price;
+    const imageUrl = item.image_url || meta.imageUrl || null;
 
-    const bucket = byVendor.get(vendorId) ?? {
+    const bucket = byVendor.get(meta.vendorId) ?? {
       lineItemIds: [],
       lineItems: [],
       subtotal: 0,
@@ -85,9 +100,10 @@ export async function attributeOrderFromWebhook(
       title: item.title || "Item",
       quantity: qty,
       price,
+      imageUrl,
     });
     bucket.subtotal += lineTotal;
-    byVendor.set(vendorId, bucket);
+    byVendor.set(meta.vendorId, bucket);
   }
 
   const attributions = [];
@@ -121,15 +137,16 @@ export async function attributeOrderFromWebhook(
   }
 }
 
-async function fetchProductVendorId(
+async function fetchProductVendorMeta(
   admin: AdminGraphql,
   productId: string,
-): Promise<string | null> {
+): Promise<{ vendorId: string | null; imageUrl: string | null }> {
   try {
     const response = await admin.graphql(
       `#graphql
-      query orderProductVendor($id: ID!) {
+      query orderProductVendorMeta($id: ID!) {
         product(id: $id) {
+          featuredImage { url }
           metafield(namespace: "${VENDOR_METAFIELD_NAMESPACE}", key: "${VENDOR_METAFIELD_KEY}") {
             value
           }
@@ -138,10 +155,14 @@ async function fetchProductVendorId(
       { variables: { id: productId } },
     );
     const json = await response.json();
-    return json.data?.product?.metafield?.value ?? null;
+    const product = json.data?.product;
+    return {
+      vendorId: product?.metafield?.value ?? null,
+      imageUrl: product?.featuredImage?.url ?? null,
+    };
   } catch (error) {
     console.error("Failed to resolve product vendor", productId, error);
-    return null;
+    return { vendorId: null, imageUrl: null };
   }
 }
 
@@ -173,6 +194,7 @@ export async function syncRecentOrders(
               id
               title
               quantity
+              image { url }
               originalUnitPriceSet {
                 shopMoney { amount }
               }
@@ -203,6 +225,7 @@ export async function syncRecentOrders(
           id: string;
           title?: string;
           quantity?: number;
+          image?: { url?: string } | null;
           originalUnitPriceSet?: { shopMoney?: { amount?: string } };
           product?: { id?: string } | null;
         }) => ({
@@ -212,6 +235,7 @@ export async function syncRecentOrders(
           quantity: li.quantity,
           price: li.originalUnitPriceSet?.shopMoney?.amount,
           product_id: gidNumericId(li.product?.id),
+          image_url: li.image?.url ?? null,
         }),
       ),
     };

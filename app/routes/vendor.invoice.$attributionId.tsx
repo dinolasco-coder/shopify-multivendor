@@ -25,6 +25,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     title: string;
     quantity: number;
     price: number;
+    imageUrl?: string | null;
   }>;
 
   return {
@@ -53,8 +54,10 @@ export default function VendorInvoice() {
           h1 { font-size: 28px; margin: 0 0 8px; }
           .muted { color: #555; font-size: 14px; }
           table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-          th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #ddd; }
+          th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #ddd; vertical-align: middle; }
           th { font-size: 13px; color: #555; }
+          .item { display: flex; align-items: center; gap: 12px; }
+          .thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 1px solid #ddd; background: #f3f3f3; }
           .totals { margin-top: 20px; max-width: 320px; margin-left: auto; }
           .totals div { display: flex; justify-content: space-between; padding: 6px 0; }
           .actions { margin-top: 28px; }
@@ -86,7 +89,16 @@ export default function VendorInvoice() {
           <tbody>
             {items.map((item, index) => (
               <tr key={index}>
-                <td>{item.title}</td>
+                <td>
+                  <div className="item">
+                    {item.imageUrl ? (
+                      <img className="thumb" src={item.imageUrl} alt="" />
+                    ) : (
+                      <div className="thumb" />
+                    )}
+                    <span>{item.title}</span>
+                  </div>
+                </td>
                 <td>{item.quantity}</td>
                 <td>{formatMoney(item.price, attribution.currency)}</td>
                 <td>
