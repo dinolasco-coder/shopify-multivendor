@@ -3,6 +3,7 @@ import { useLoaderData } from "react-router";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import prisma from "../db.server";
 import { formatMoney } from "../utils/money";
+import { unauthenticated } from "../shopify.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
@@ -28,19 +29,49 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     imageUrl?: string | null;
   }>;
 
+  let note: string | null = null;
+  let details: Array<{ key: string; value: string }> = [];
+  try {
+    const { admin } = await unauthenticated.admin(vendor.shop);
+    const response = await admin.graphql(
+      `#graphql
+      query vendorInvoiceOrder($id: ID!) {
+        order(id: $id) {
+          note
+          customAttributes { key value }
+        }
+      }`,
+      { variables: { id: attribution.shopifyOrderId } },
+    );
+    const json = await response.json();
+    const order = json.data?.order;
+    if (order?.note) note = String(order.note);
+    details = (
+      (order?.customAttributes ?? []) as Array<{
+        key?: string;
+        value?: string;
+      }>
+    )
+      .filter((a) => a.key && a.value)
+      .map((a) => ({ key: String(a.key), value: String(a.value) }));
+  } catch (error) {
+    console.error("Failed loading order notes for invoice", error);
+  }
+
   return {
     vendorName: vendor.name,
     vendorEmail: vendor.email,
     attribution,
     items,
+    note,
+    details,
   };
 };
 
 export default function VendorInvoice() {
-  const { vendorName, vendorEmail, attribution, items } =
+  const { vendorName, vendorEmail, attribution, items, note, details } =
     useLoaderData<typeof loader>();
-  const sellerNet =
-    attribution.subtotal - attribution.commissionAmount;
+  const sellerNet = attribution.subtotal - attribution.commissionAmount;
 
   return (
     <html lang="en">
@@ -58,6 +89,7 @@ export default function VendorInvoice() {
           th { font-size: 13px; color: #555; }
           .item { display: flex; align-items: center; gap: 12px; }
           .thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 1px solid #ddd; background: #f3f3f3; }
+          .notes { margin-top: 20px; padding: 12px 14px; background: #f6f6f7; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
           .totals { margin-top: 20px; max-width: 320px; margin-left: auto; }
           .totals div { display: flex; justify-content: space-between; padding: 6px 0; }
           .actions { margin-top: 28px; }
@@ -76,6 +108,28 @@ export default function VendorInvoice() {
           <strong>Date:</strong>{" "}
           {new Date(attribution.createdAt).toLocaleString()}
         </p>
+
+        {(note || details.length > 0) && (
+          <div className="notes">
+            {note ? (
+              <p style={{ margin: "0 0 8px" }}>
+                <strong>Notes:</strong> {note}
+              </p>
+            ) : null}
+            {details.length > 0 ? (
+              <div>
+                <strong>Additional details</strong>
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                  {details.map((d) => (
+                    <li key={d.key}>
+                      {d.key}: {d.value}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <table>
           <thead>

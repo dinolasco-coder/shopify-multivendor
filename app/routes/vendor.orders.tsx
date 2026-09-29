@@ -12,6 +12,8 @@ type OrderStatusMap = Record<
     fulfillment: string;
     financial: string;
     adminUrl: string;
+    note: string | null;
+    details: Array<{ key: string; value: string }>;
     imagesByLineId: Record<string, string>;
     imagesByTitle: Record<string, string>;
   }
@@ -39,6 +41,8 @@ async function fetchOrderStatuses(
           query vendorOrderStatus($id: ID!) {
             order(id: $id) {
               id
+              note
+              customAttributes { key value }
               displayFulfillmentStatus
               displayFinancialStatus
               lineItems(first: 50) {
@@ -76,10 +80,23 @@ async function fetchOrderStatuses(
             imagesByTitle[String(li.title).toLowerCase()] = url;
           }
         }
+        const details = (
+          (order.customAttributes ?? []) as Array<{
+            key?: string;
+            value?: string;
+          }>
+        )
+          .filter((a) => a.key && a.value)
+          .map((a) => ({
+            key: String(a.key),
+            value: String(a.value),
+          }));
         map[id] = {
           fulfillment: order.displayFulfillmentStatus || "UNFULFILLED",
           financial: order.displayFinancialStatus || "PENDING",
           adminUrl: `https://admin.shopify.com/store/${shopHandle}/orders/${numeric}`,
+          note: order.note ? String(order.note) : null,
+          details,
           imagesByLineId,
           imagesByTitle,
         };
@@ -271,6 +288,51 @@ export default function VendorOrders() {
                                 .map((i) => `${i.title} × ${i.quantity}`)
                                 .join(" · ")}
                             </p>
+                            {status?.note ? (
+                              <p
+                                className="sx-secondary"
+                                style={{
+                                  marginTop: 8,
+                                  padding: "8px 10px",
+                                  background: "#f6f6f7",
+                                  borderRadius: 8,
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                  maxWidth: 420,
+                                }}
+                              >
+                                <strong style={{ color: "#202223" }}>
+                                  Notes:{" "}
+                                </strong>
+                                {status.note}
+                              </p>
+                            ) : null}
+                            {status?.details?.length ? (
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  fontSize: 12,
+                                  color: "#6d7175",
+                                  maxWidth: 420,
+                                }}
+                              >
+                                <strong style={{ color: "#202223" }}>
+                                  Additional details
+                                </strong>
+                                <ul
+                                  style={{
+                                    margin: "4px 0 0",
+                                    paddingLeft: 16,
+                                  }}
+                                >
+                                  {status.details.map((d) => (
+                                    <li key={d.key}>
+                                      {d.key}: {d.value}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </td>
