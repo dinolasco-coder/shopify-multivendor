@@ -182,8 +182,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const attributionId = String(form.get("attributionId") || "");
   const trackingNumber = String(form.get("trackingNumber") || "").trim();
   const trackingCompany = String(form.get("trackingCompany") || "").trim();
+  const trackingUrl = String(form.get("trackingUrl") || "").trim();
 
   if (!attributionId) return { error: "Missing order." };
+
+  if (trackingUrl) {
+    try {
+      const parsed = new URL(trackingUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return { error: "Tracking URL must start with http:// or https://" };
+      }
+    } catch {
+      return { error: "Enter a valid tracking page link." };
+    }
+  }
 
   const attribution = await prisma.orderAttribution.findUnique({
     where: { id: attributionId },
@@ -204,6 +216,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       lineItemIds,
       trackingNumber: trackingNumber || null,
       trackingCompany: trackingCompany || null,
+      trackingUrl: trackingUrl || null,
       notifyCustomer: true,
     });
     return {
@@ -222,7 +235,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 
-type ShipDraft = { trackingNumber: string; trackingCompany: string };
+type ShipDraft = {
+  trackingNumber: string;
+  trackingCompany: string;
+  trackingUrl: string;
+};
 
 export default function VendorOrders() {
   const { attributions, statuses } = useLoaderData<typeof loader>();
@@ -259,7 +276,13 @@ export default function VendorOrders() {
   }, [attributions, statuses, tab, query, actionData]);
 
   function draftFor(id: string): ShipDraft {
-    return shipDraft[id] || { trackingNumber: "", trackingCompany: "" };
+    return (
+      shipDraft[id] || {
+        trackingNumber: "",
+        trackingCompany: "",
+        trackingUrl: "",
+      }
+    );
   }
 
   return (
@@ -596,6 +619,41 @@ export default function VendorOrders() {
                                   </option>
                                 ))}
                               </select>
+                              <label
+                                style={{
+                                  display: "block",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  marginBottom: 4,
+                                  color: "#6d7175",
+                                }}
+                              >
+                                Tracking URL
+                              </label>
+                              <input
+                                type="url"
+                                name="trackingUrl"
+                                placeholder="Enter valid tracking page link"
+                                value={draft.trackingUrl}
+                                onChange={(e) =>
+                                  setShipDraft((prev) => ({
+                                    ...prev,
+                                    [order.id]: {
+                                      ...draftFor(order.id),
+                                      trackingUrl: e.target.value,
+                                    },
+                                  }))
+                                }
+                                style={{
+                                  width: "100%",
+                                  marginBottom: 8,
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  border: "1px solid #c9cccf",
+                                  fontSize: 13,
+                                  boxSizing: "border-box",
+                                }}
+                              />
                               <button
                                 type="submit"
                                 className="sx-btn sx-btn--primary"

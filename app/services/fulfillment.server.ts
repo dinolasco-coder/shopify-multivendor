@@ -15,6 +15,7 @@ export async function fulfillVendorLineItems(
     lineItemIds: string[];
     trackingNumber?: string | null;
     trackingCompany?: string | null;
+    trackingUrl?: string | null;
     notifyCustomer?: boolean;
   },
 ) {
@@ -87,15 +88,17 @@ export async function fulfillVendorLineItems(
 
   const trackingNumber = (input.trackingNumber || "").trim();
   const trackingCompany = (input.trackingCompany || "").trim();
+  const trackingUrl = (input.trackingUrl || "").trim();
 
   const fulfillment: Record<string, unknown> = {
     notifyCustomer: input.notifyCustomer !== false,
     lineItemsByFulfillmentOrder,
   };
-  if (trackingNumber || trackingCompany) {
+  if (trackingNumber || trackingCompany || trackingUrl) {
     fulfillment.trackingInfo = {
       ...(trackingNumber ? { number: trackingNumber } : {}),
       ...(trackingCompany ? { company: trackingCompany } : {}),
+      ...(trackingUrl ? { url: trackingUrl } : {}),
     };
   }
 
