@@ -13,6 +13,7 @@ type OrderStatusMap = Record<
     financial: string;
     adminUrl: string;
     imagesByLineId: Record<string, string>;
+    imagesByTitle: Record<string, string>;
   }
 >;
 
@@ -43,7 +44,14 @@ async function fetchOrderStatuses(
               lineItems(first: 50) {
                 nodes {
                   id
+                  title
                   image { url }
+                  product {
+                    featuredImage { url }
+                  }
+                  variant {
+                    image { url }
+                  }
                 }
               }
             }
@@ -55,9 +63,17 @@ async function fetchOrderStatuses(
         if (!order) return;
         const numeric = String(order.id).split("/").pop();
         const imagesByLineId: Record<string, string> = {};
+        const imagesByTitle: Record<string, string> = {};
         for (const li of order.lineItems?.nodes ?? []) {
-          if (li?.id && li?.image?.url) {
-            imagesByLineId[li.id] = li.image.url;
+          const url =
+            li?.image?.url ||
+            li?.variant?.image?.url ||
+            li?.product?.featuredImage?.url ||
+            null;
+          if (!url) continue;
+          if (li?.id) imagesByLineId[li.id] = url;
+          if (li?.title) {
+            imagesByTitle[String(li.title).toLowerCase()] = url;
           }
         }
         map[id] = {
@@ -65,6 +81,7 @@ async function fetchOrderStatuses(
           financial: order.displayFinancialStatus || "PENDING",
           adminUrl: `https://admin.shopify.com/store/${shopHandle}/orders/${numeric}`,
           imagesByLineId,
+          imagesByTitle,
         };
       } catch (error) {
         console.error("vendor order status failed", id, error);
@@ -192,6 +209,9 @@ export default function VendorOrders() {
                     imageUrl:
                       item.imageUrl ||
                       (item.id ? status?.imagesByLineId?.[item.id] : null) ||
+                      status?.imagesByTitle?.[
+                        String(item.title || "").toLowerCase()
+                      ] ||
                       null,
                   }));
                   return (
