@@ -22,20 +22,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const settings = await getOrCreateSettings(session.shop);
   const base = appBaseUrl(request);
+  const scopesConfigured = (process.env.SCOPES || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const sessionScopes = (session.scope || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const need = [
+    "read_merchant_managed_fulfillment_orders",
+    "write_merchant_managed_fulfillment_orders",
+  ];
+  const envHasFulfillment = need.every((s) => scopesConfigured.includes(s));
+  const sessionHasFulfillment = need.every((s) => sessionScopes.includes(s));
+
   return {
     settings,
     registerUrl: `${base}/vendor/register`,
     loginUrl: `${base}/vendor/login`,
-    scopesConfigured: (process.env.SCOPES || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    hasFulfillmentScopes: Boolean(
-      process.env.SCOPES?.includes("read_merchant_managed_fulfillment_orders") &&
-        process.env.SCOPES?.includes(
-          "write_merchant_managed_fulfillment_orders",
-        ),
-    ),
+    shop: session.shop,
+    scopesConfigured,
+    sessionScopes,
+    hasFulfillmentScopes: envHasFulfillment,
+    sessionHasFulfillmentScopes: sessionHasFulfillment,
+    reauthUrl: `${base}/auth?shop=${encodeURIComponent(session.shop)}`,
   };
 };
 
@@ -99,7 +110,10 @@ export default function SettingsPage() {
     registerUrl,
     loginUrl,
     scopesConfigured,
+    sessionScopes,
     hasFulfillmentScopes,
+    sessionHasFulfillmentScopes,
+    reauthUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -128,15 +142,19 @@ export default function SettingsPage() {
 
         {!hasFulfillmentScopes ? (
           <div className="nx-banner err">
-            Fulfillment scopes are missing on this server. Set Railway{" "}
-            <strong>SCOPES</strong> (see panel below), redeploy, then reopen
-            Multivendor here so Shopify can ask you to approve permissions.
+            Railway <strong>SCOPES</strong> is still missing fulfillment. Paste
+            the value below into Railway Variables, save, redeploy, then use
+            Re-authorize.
+          </div>
+        ) : !sessionHasFulfillmentScopes ? (
+          <div className="nx-banner err">
+            Server SCOPES are OK, but this shop’s token is still old. Click{" "}
+            <strong>Re-authorize Shopify permissions</strong> below and approve
+            the popup.
           </div>
         ) : (
           <div className="nx-banner ok">
-            Server SCOPES include fulfillment. If sellers still see Access
-            denied, open this Multivendor app from Shopify Admin once and
-            approve any permission prompt.
+            Fulfillment permissions look ready for this shop.
           </div>
         )}
 
@@ -228,16 +246,13 @@ export default function SettingsPage() {
           </div>
 
           <div className="nx-panel">
-            <h2>Payouts &amp; shipping</h2>
+            <h2>Fulfillment permissions</h2>
             <p>
-              Record seller payouts on the Payouts page (manual bank/GCash).
-              Sellers can mark orders fulfilled in the seller portal (tracking +
-              carrier + URL).
+              Seller “Mark as fulfilled” needs these scopes on{" "}
+              <strong>Railway</strong> and approved on this shop.
             </p>
             <p>
-              <strong>Railway SCOPES</strong> (paste into Variables, then
-              redeploy). After that, reopen Multivendor in Shopify Admin and
-              approve permissions:
+              Railway SCOPES (copy/paste):
             </p>
             <code
               style={{
@@ -253,9 +268,36 @@ export default function SettingsPage() {
             >
               {scopesText || "(SCOPES env not set on this server)"}
             </code>
-            <p style={{ marginBottom: 0 }}>
-              Live server has fulfillment scopes:{" "}
+            <p>
+              Server has fulfillment scopes:{" "}
               <strong>{hasFulfillmentScopes ? "Yes" : "No"}</strong>
+              <br />
+              This shop token has fulfillment scopes:{" "}
+              <strong>{sessionHasFulfillmentScopes ? "Yes" : "No"}</strong>
+            </p>
+            <p style={{ fontSize: 12, color: "#6d7175" }}>
+              Shop token scopes:{" "}
+              {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
+            </p>
+            <a
+              className="nx-btn"
+              href={reauthUrl}
+              target="_top"
+              rel="noreferrer"
+              style={{
+                display: "inline-flex",
+                textDecoration: "none",
+                marginTop: 8,
+              }}
+            >
+              Re-authorize Shopify permissions
+            </a>
+          </div>
+
+          <div className="nx-panel">
+            <h2>Payouts</h2>
+            <p style={{ marginBottom: 0 }}>
+              Record seller payouts on the Payouts page (manual bank/GCash).
             </p>
           </div>
 
