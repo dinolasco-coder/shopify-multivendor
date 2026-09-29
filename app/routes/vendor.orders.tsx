@@ -1,10 +1,30 @@
-import type { LoaderFunctionArgs } from "react-router";
-import { Link, useLoaderData } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import {
+  Form,
+  Link,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
 import { useMemo, useState } from "react";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { listAttributionsForVendor } from "../models/attribution.server";
 import { formatMoney } from "../utils/money";
 import { unauthenticated } from "../shopify.server";
+import { fulfillVendorLineItems } from "../services/fulfillment.server";
+import prisma from "../db.server";
+
+const CARRIERS = [
+  "",
+  "J&T Express",
+  "Ninja Van",
+  "LBC",
+  "Flash Express",
+  "SPX",
+  "Grab Express",
+  "Lalamove",
+  "Other",
+];
 
 type OrderStatusMap = Record<
   string,
@@ -117,6 +137,17 @@ function labelStatus(value: string) {
     .join(" ");
 }
 
+function parseLineItemIds(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed)
+      ? parsed.map((id) => String(id)).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
   if (result instanceof Response) throw result;
@@ -138,34 +169,126 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { attributions, statuses };
 };
 
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const result = await requireApprovedVendor(request);
+  if (result instanceof Response) throw result;
+  const { vendor } = result;
+
+  const form = await request.formData();
+  if (String(form.get("intent") || "") !== "fulfill") {
+    return { error: "Unknown action." };
+  }
+
+  const attributionId = String(form.get("attributionId") || "");
+  const trackingNumber = String(form.get("trackingNumber") || "").trim();
+  const trackingCompany = String(form.get("trackingCompany") || "").trim();
+
+  if (!attributionId) return { error: "Missing order." };
+
+  const attribution = await prisma.orderAttribution.findUnique({
+    where: { id: attributionId },
+  });
+  if (!attribution || attribution.vendorId !== vendor.id) {
+    return { error: "You can only fulfill your own order items." };
+  }
+
+  const lineItemIds = parseLineItemIds(attribution.lineItemIds);
+  if (!lineItemIds.length) {
+    return { error: "No line items found for this order." };
+  }
+
+  try {
+    const { admin } = await unauthenticated.admin(vendor.shop);
+    await fulfillVendorLineItems(admin, {
+      shopifyOrderId: attribution.shopifyOrderId,
+      lineItemIds,
+      trackingNumber: trackingNumber || null,
+      trackingCompany: trackingCompany || null,
+      notifyCustomer: true,
+    });
+    return {
+      ok: true,
+      message: `Marked ${attribution.shopifyOrderName || "order"} as fulfilled.`,
+      attributionId,
+    };
+  } catch (error) {
+    console.error("Vendor fulfill failed", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to mark as fulfilled. Update Multivendor app scopes in Shopify Admin if prompted.",
+    };
+  }
+};
+
+type ShipDraft = { trackingNumber: string; trackingCompany: string };
+
 export default function VendorOrders() {
   const { attributions, statuses } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  const fulfillingId =
+    busy && navigation.formData?.get("intent") === "fulfill"
+      ? String(navigation.formData.get("attributionId") || "")
+      : "";
+
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
+  const [shipDraft, setShipDraft] = useState<Record<string, ShipDraft>>({});
 
   const filtered = useMemo(() => {
     return attributions.filter((order) => {
       const status = statuses[order.shopifyOrderId];
-      const fulfillment = (status?.fulfillment || "").toUpperCase();
-      if (tab === "unfulfilled" && fulfillment !== "UNFULFILLED") return false;
+      let fulfillment = (status?.fulfillment || "").toUpperCase();
+      if (
+        actionData &&
+        "ok" in actionData &&
+        actionData.attributionId === order.id
+      ) {
+        fulfillment = "FULFILLED";
+      }
+      if (tab === "unfulfilled" && fulfillment === "FULFILLED") return false;
       if (tab === "fulfilled" && fulfillment !== "FULFILLED") return false;
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
       const name = (order.shopifyOrderName || order.shopifyOrderId).toLowerCase();
       return name.includes(q);
     });
-  }, [attributions, statuses, tab, query]);
+  }, [attributions, statuses, tab, query, actionData]);
+
+  function draftFor(id: string): ShipDraft {
+    return shipDraft[id] || { trackingNumber: "", trackingCompany: "" };
+  }
 
   return (
     <div>
       <h1 className="sx-title">Orders</h1>
       <p className="sx-sub">
-        View your orders, print invoices, and fulfill in Shopify when needed.
+        View orders, add tracking, mark fulfilled, and print invoices.
       </p>
 
+      {actionData && "error" in actionData && actionData.error ? (
+        <div
+          className="sx-banner"
+          style={{ background: "#fbeae9", color: "#8e1f0b" }}
+        >
+          {actionData.error}
+        </div>
+      ) : null}
+      {actionData && "message" in actionData && actionData.message ? (
+        <div
+          className="sx-banner"
+          style={{ background: "#e4f7e9", color: "#0d6b2d" }}
+        >
+          {actionData.message}
+        </div>
+      ) : null}
+
       <div className="sx-banner info">
-        Fulfillment is done in Shopify Admin (or your courier app). Use{" "}
-        <strong>Open in Shopify</strong> then print an invoice for your records.
+        Enter <strong>tracking number</strong> and <strong>carrier</strong>, then
+        tap <strong>Mark as fulfilled</strong>. Shopify notifies the customer.
       </div>
 
       <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
@@ -219,8 +342,18 @@ export default function VendorOrders() {
                     imageUrl?: string | null;
                   }>;
                   const status = statuses[order.shopifyOrderId];
-                  const fulfillment = status?.fulfillment || "UNFULFILLED";
+                  const fulfillment = (
+                    actionData &&
+                    "ok" in actionData &&
+                    actionData.attributionId === order.id
+                      ? "FULFILLED"
+                      : status?.fulfillment || "UNFULFILLED"
+                  ).toUpperCase();
                   const financial = status?.financial || "PENDING";
+                  const canFulfill =
+                    fulfillment !== "FULFILLED" &&
+                    fulfillment !== "CANCELLED";
+                  const draft = draftFor(order.id);
                   const enrichedItems = items.map((item) => ({
                     ...item,
                     imageUrl:
@@ -367,24 +500,135 @@ export default function VendorOrders() {
                         </span>
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {status?.adminUrl && (
-                            <a
-                              className="sx-btn"
-                              href={status.adminUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Open in Shopify
-                            </a>
-                          )}
-                          <Link
-                            className="sx-btn sx-btn--primary"
-                            to={`/vendor/invoice/${order.id}`}
-                            target="_blank"
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                            minWidth: 220,
+                          }}
+                        >
+                          {canFulfill ? (
+                            <Form method="post">
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="fulfill"
+                              />
+                              <input
+                                type="hidden"
+                                name="attributionId"
+                                value={order.id}
+                              />
+                              <label
+                                style={{
+                                  display: "block",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  marginBottom: 4,
+                                  color: "#6d7175",
+                                }}
+                              >
+                                Tracking number
+                              </label>
+                              <input
+                                type="text"
+                                name="trackingNumber"
+                                placeholder="e.g. 1234567890"
+                                value={draft.trackingNumber}
+                                onChange={(e) =>
+                                  setShipDraft((prev) => ({
+                                    ...prev,
+                                    [order.id]: {
+                                      ...draftFor(order.id),
+                                      trackingNumber: e.target.value,
+                                    },
+                                  }))
+                                }
+                                style={{
+                                  width: "100%",
+                                  marginBottom: 8,
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  border: "1px solid #c9cccf",
+                                  fontSize: 13,
+                                  boxSizing: "border-box",
+                                }}
+                              />
+                              <label
+                                style={{
+                                  display: "block",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  marginBottom: 4,
+                                  color: "#6d7175",
+                                }}
+                              >
+                                Shipping carrier
+                              </label>
+                              <select
+                                name="trackingCompany"
+                                value={draft.trackingCompany}
+                                onChange={(e) =>
+                                  setShipDraft((prev) => ({
+                                    ...prev,
+                                    [order.id]: {
+                                      ...draftFor(order.id),
+                                      trackingCompany: e.target.value,
+                                    },
+                                  }))
+                                }
+                                style={{
+                                  width: "100%",
+                                  marginBottom: 8,
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  border: "1px solid #c9cccf",
+                                  fontSize: 13,
+                                  boxSizing: "border-box",
+                                  background: "#fff",
+                                }}
+                              >
+                                <option value="">Select carrier</option>
+                                {CARRIERS.filter(Boolean).map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="submit"
+                                className="sx-btn sx-btn--primary"
+                                disabled={busy}
+                                style={{ width: "100%" }}
+                              >
+                                {fulfillingId === order.id
+                                  ? "Fulfilling…"
+                                  : "Mark as fulfilled"}
+                              </button>
+                            </Form>
+                          ) : null}
+                          <div
+                            style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
                           >
-                            Invoice
-                          </Link>
+                            {status?.adminUrl && (
+                              <a
+                                className="sx-btn"
+                                href={status.adminUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open in Shopify
+                              </a>
+                            )}
+                            <Link
+                              className="sx-btn"
+                              to={`/vendor/invoice/${order.id}`}
+                              target="_blank"
+                            >
+                              Invoice
+                            </Link>
+                          </div>
                         </div>
                       </td>
                     </tr>
