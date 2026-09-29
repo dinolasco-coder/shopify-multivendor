@@ -200,8 +200,11 @@ export default function SettingsPage() {
             <h2>Payouts &amp; shipping</h2>
             <p>
               Record seller payouts on the Payouts page (manual bank/GCash).
-              Shipping carriers (SPX, Shiprocket, etc.) stay as separate Shopify
-              apps — not built into this marketplace.
+              Sellers can mark orders fulfilled in the seller portal (tracking +
+              carrier). If they see “Access denied for fulfillmentOrders”, update
+              Railway <code>SCOPES</code> to match <code>shopify.app.toml</code>,
+              redeploy, then reopen this app in Shopify Admin and approve the new
+              permissions.
             </p>
           </div>
 

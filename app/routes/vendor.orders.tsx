@@ -226,11 +226,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   } catch (error) {
     console.error("Vendor fulfill failed", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to mark as fulfilled.";
+    const needsScopes = /access denied|fulfillmentOrders|not authorized|scope/i.test(
+      message,
+    );
     return {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to mark as fulfilled. Update Multivendor app scopes in Shopify Admin if prompted.",
+      error: needsScopes
+        ? "Access denied for fulfillment. Update Railway SCOPES (add fulfillment order scopes), redeploy, then open Multivendor in Shopify Admin and approve the new permissions."
+        : message,
     };
   }
 };
