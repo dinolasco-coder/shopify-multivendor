@@ -26,6 +26,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     settings,
     registerUrl: `${base}/vendor/register`,
     loginUrl: `${base}/vendor/login`,
+    scopesConfigured: (process.env.SCOPES || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    hasFulfillmentScopes: Boolean(
+      process.env.SCOPES?.includes("read_merchant_managed_fulfillment_orders") &&
+        process.env.SCOPES?.includes(
+          "write_merchant_managed_fulfillment_orders",
+        ),
+    ),
   };
 };
 
@@ -84,7 +94,13 @@ const styles = `
 `;
 
 export default function SettingsPage() {
-  const { settings, registerUrl, loginUrl } = useLoaderData<typeof loader>();
+  const {
+    settings,
+    registerUrl,
+    loginUrl,
+    scopesConfigured,
+    hasFulfillmentScopes,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -92,6 +108,7 @@ export default function SettingsPage() {
     actionData && "settings" in actionData && actionData.settings
       ? actionData.settings
       : settings;
+  const scopesText = scopesConfigured.join(",");
 
   return (
     <s-page heading="Settings">
@@ -107,6 +124,20 @@ export default function SettingsPage() {
         )}
         {actionData && "message" in actionData && actionData.message && (
           <div className="nx-banner ok">{actionData.message}</div>
+        )}
+
+        {!hasFulfillmentScopes ? (
+          <div className="nx-banner err">
+            Fulfillment scopes are missing on this server. Set Railway{" "}
+            <strong>SCOPES</strong> (see panel below), redeploy, then reopen
+            Multivendor here so Shopify can ask you to approve permissions.
+          </div>
+        ) : (
+          <div className="nx-banner ok">
+            Server SCOPES include fulfillment. If sellers still see Access
+            denied, open this Multivendor app from Shopify Admin once and
+            approve any permission prompt.
+          </div>
         )}
 
         <Form method="post">
@@ -201,10 +232,30 @@ export default function SettingsPage() {
             <p>
               Record seller payouts on the Payouts page (manual bank/GCash).
               Sellers can mark orders fulfilled in the seller portal (tracking +
-              carrier). If they see “Access denied for fulfillmentOrders”, update
-              Railway <code>SCOPES</code> to match <code>shopify.app.toml</code>,
-              redeploy, then reopen this app in Shopify Admin and approve the new
-              permissions.
+              carrier + URL).
+            </p>
+            <p>
+              <strong>Railway SCOPES</strong> (paste into Variables, then
+              redeploy). After that, reopen Multivendor in Shopify Admin and
+              approve permissions:
+            </p>
+            <code
+              style={{
+                display: "block",
+                fontSize: 11,
+                background: "#f6f6f7",
+                border: "1px solid #e4e5e7",
+                borderRadius: 8,
+                padding: 10,
+                wordBreak: "break-all",
+                marginBottom: 10,
+              }}
+            >
+              {scopesText || "(SCOPES env not set on this server)"}
+            </code>
+            <p style={{ marginBottom: 0 }}>
+              Live server has fulfillment scopes:{" "}
+              <strong>{hasFulfillmentScopes ? "Yes" : "No"}</strong>
             </p>
           </div>
 
