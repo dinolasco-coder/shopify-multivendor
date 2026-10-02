@@ -137,6 +137,95 @@ function labelStatus(value: string) {
     .join(" ");
 }
 
+const URL_IN_TEXT =
+  /https?:\/\/[^\s<>"')\]]+/gi;
+
+function isImageUrl(url: string) {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(path);
+  } catch {
+    return false;
+  }
+}
+
+function extractUrls(text: string): string[] {
+  return [...text.matchAll(URL_IN_TEXT)].map((m) => m[0]);
+}
+
+function NoteWithLinks({ note }: { note: string }) {
+  const urls = extractUrls(note);
+  const imageUrls = urls.filter(isImageUrl);
+  const parts = note.split(URL_IN_TEXT);
+  const matches = note.match(URL_IN_TEXT) || [];
+
+  return (
+    <div
+      className="sx-secondary"
+      style={{
+        marginTop: 8,
+        padding: "8px 10px",
+        background: "#f6f6f7",
+        borderRadius: 8,
+        maxWidth: 420,
+      }}
+    >
+      <p style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        <strong style={{ color: "#202223" }}>Notes: </strong>
+        {parts.map((part, i) => (
+          <span key={i}>
+            {part}
+            {matches[i] ? (
+              <a
+                href={matches[i]}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "#2c6ecb", wordBreak: "break-all" }}
+              >
+                {matches[i]}
+              </a>
+            ) : null}
+          </span>
+        ))}
+      </p>
+      {imageUrls.length > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          {imageUrls.map((url) => (
+            <a
+              key={url}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              title="Open design image"
+            >
+              <img
+                src={url}
+                alt="Custom design"
+                style={{
+                  width: 96,
+                  height: 96,
+                  objectFit: "cover",
+                  borderRadius: 8,
+                  border: "1px solid #e4e5e7",
+                  display: "block",
+                  background: "#fff",
+                }}
+              />
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function parseLineItemIds(raw: string): string[] {
   try {
     const parsed = JSON.parse(raw || "[]");
@@ -449,23 +538,7 @@ export default function VendorOrders() {
                                 .join(" · ")}
                             </p>
                             {status?.note ? (
-                              <p
-                                className="sx-secondary"
-                                style={{
-                                  marginTop: 8,
-                                  padding: "8px 10px",
-                                  background: "#f6f6f7",
-                                  borderRadius: 8,
-                                  whiteSpace: "pre-wrap",
-                                  wordBreak: "break-word",
-                                  maxWidth: 420,
-                                }}
-                              >
-                                <strong style={{ color: "#202223" }}>
-                                  Notes:{" "}
-                                </strong>
-                                {status.note}
-                              </p>
+                              <NoteWithLinks note={status.note} />
                             ) : null}
                             {status?.details?.length ? (
                               <div

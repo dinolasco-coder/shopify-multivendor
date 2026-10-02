@@ -5,6 +5,39 @@ import prisma from "../db.server";
 import { formatMoney } from "../utils/money";
 import { unauthenticated } from "../shopify.server";
 
+const URL_IN_TEXT = /https?:\/\/[^\s<>"')\]]+/gi;
+
+function isImageUrl(url: string) {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(path);
+  } catch {
+    return false;
+  }
+}
+
+function linkifyNote(note: string) {
+  const parts = note.split(URL_IN_TEXT);
+  const matches = note.match(URL_IN_TEXT) || [];
+  return parts.flatMap((part, i) => {
+    const nodes = [<span key={`t-${i}`}>{part}</span>];
+    if (matches[i]) {
+      nodes.push(
+        <a
+          key={`u-${i}`}
+          href={matches[i]}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "#2c6ecb", wordBreak: "break-all" }}
+        >
+          {matches[i]}
+        </a>,
+      );
+    }
+    return nodes;
+  });
+}
+
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
   if (result instanceof Response) throw result;
@@ -112,9 +145,42 @@ export default function VendorInvoice() {
         {(note || details.length > 0) && (
           <div className="notes">
             {note ? (
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Notes:</strong> {note}
-              </p>
+              <div style={{ margin: "0 0 8px" }}>
+                <p style={{ margin: 0 }}>
+                  <strong>Notes:</strong> {linkifyNote(note)}
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginTop: 10,
+                  }}
+                >
+                  {(note.match(URL_IN_TEXT) || [])
+                    .filter(isImageUrl)
+                    .map((url) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <img
+                          src={url}
+                          alt="Custom design"
+                          style={{
+                            width: 120,
+                            height: 120,
+                            objectFit: "cover",
+                            borderRadius: 8,
+                            border: "1px solid #ddd",
+                          }}
+                        />
+                      </a>
+                    ))}
+                </div>
+              </div>
             ) : null}
             {details.length > 0 ? (
               <div>
