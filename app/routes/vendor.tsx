@@ -133,6 +133,11 @@ export default function VendorLayout() {
               active={path.startsWith("/vendor/orders")}
             />
             <NavLink
+              to="/vendor/customized"
+              label="Customized"
+              active={path.startsWith("/vendor/customized")}
+            />
+            <NavLink
               to="/vendor/products"
               label="Products"
               active={path.startsWith("/vendor/products")}
