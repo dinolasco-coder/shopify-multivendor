@@ -1,41 +1,56 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
+import type { ReactNode } from "react";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import prisma from "../db.server";
 import { formatMoney } from "../utils/money";
 import { unauthenticated } from "../shopify.server";
 
-const URL_IN_TEXT = /https?:\/\/[^\s<>"')\]]+/gi;
+function findUrls(text: string): string[] {
+  const found = text.match(/https?:\/\/[^\s<>"'\)\]|]+/gi) || [];
+  return found.map((raw) => raw.replace(/[.,;:!?]+$/g, ""));
+}
 
 function isImageUrl(url: string) {
   try {
     const path = new URL(url).pathname.toLowerCase();
-    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(path);
+    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
   } catch {
     return false;
   }
 }
 
 function linkifyNote(note: string) {
-  const parts = note.split(URL_IN_TEXT);
-  const matches = note.match(URL_IN_TEXT) || [];
-  return parts.flatMap((part, i) => {
-    const nodes = [<span key={`t-${i}`}>{part}</span>];
-    if (matches[i]) {
-      nodes.push(
-        <a
-          key={`u-${i}`}
-          href={matches[i]}
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "#2c6ecb", wordBreak: "break-all" }}
-        >
-          {matches[i]}
-        </a>,
-      );
+  const urls = findUrls(note);
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  urls.forEach((url, i) => {
+    const at = note.indexOf(url, cursor);
+    if (at === -1) return;
+    if (at > cursor) {
+      nodes.push(<span key={`t-${i}`}>{note.slice(cursor, at)}</span>);
     }
-    return nodes;
+    nodes.push(
+      <a
+        key={`u-${i}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          color: "#2c6ecb",
+          textDecoration: "underline",
+          wordBreak: "break-all",
+        }}
+      >
+        {url}
+      </a>,
+    );
+    cursor = at + url.length;
   });
+  if (cursor < note.length) {
+    nodes.push(<span key="tail">{note.slice(cursor)}</span>);
+  }
+  return nodes;
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -157,7 +172,7 @@ export default function VendorInvoice() {
                     marginTop: 10,
                   }}
                 >
-                  {(note.match(URL_IN_TEXT) || [])
+                  {(findUrls(note) || [])
                     .filter(isImageUrl)
                     .map((url) => (
                       <a

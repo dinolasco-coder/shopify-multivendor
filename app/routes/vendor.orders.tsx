@@ -137,56 +137,70 @@ function labelStatus(value: string) {
     .join(" ");
 }
 
-const URL_IN_TEXT =
-  /https?:\/\/[^\s<>"')\]]+/gi;
+function findUrls(text: string): string[] {
+  const re = /https?:\/\/[^\s<>"'\)\]|]+/gi;
+  const found = text.match(re) || [];
+  return found.map((raw) => raw.replace(/[.,;:!?]+$/g, ""));
+}
 
 function isImageUrl(url: string) {
   try {
     const path = new URL(url).pathname.toLowerCase();
-    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(path);
+    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
   } catch {
     return false;
   }
 }
 
-function extractUrls(text: string): string[] {
-  return [...text.matchAll(URL_IN_TEXT)].map((m) => m[0]);
-}
-
 function NoteWithLinks({ note }: { note: string }) {
-  const urls = extractUrls(note);
+  const urls = findUrls(note);
   const imageUrls = urls.filter(isImageUrl);
-  const parts = note.split(URL_IN_TEXT);
-  const matches = note.match(URL_IN_TEXT) || [];
+
+  // Build clickable text without a shared /g RegExp (that broke links).
+  const nodes: Array<string | { url: string }> = [];
+  let cursor = 0;
+  for (const url of urls) {
+    const at = note.indexOf(url, cursor);
+    if (at === -1) continue;
+    if (at > cursor) nodes.push(note.slice(cursor, at));
+    nodes.push({ url });
+    cursor = at + url.length;
+  }
+  if (cursor < note.length) nodes.push(note.slice(cursor));
 
   return (
     <div
-      className="sx-secondary"
       style={{
         marginTop: 8,
         padding: "8px 10px",
         background: "#f6f6f7",
         borderRadius: 8,
         maxWidth: 420,
+        fontSize: 12,
+        color: "#6d7175",
       }}
     >
       <p style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
         <strong style={{ color: "#202223" }}>Notes: </strong>
-        {parts.map((part, i) => (
-          <span key={i}>
-            {part}
-            {matches[i] ? (
-              <a
-                href={matches[i]}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "#2c6ecb", wordBreak: "break-all" }}
-              >
-                {matches[i]}
-              </a>
-            ) : null}
-          </span>
-        ))}
+        {nodes.map((node, i) =>
+          typeof node === "string" ? (
+            <span key={i}>{node}</span>
+          ) : (
+            <a
+              key={i}
+              href={node.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: "#2c6ecb",
+                textDecoration: "underline",
+                wordBreak: "break-all",
+              }}
+            >
+              {node.url}
+            </a>
+          ),
+        )}
       </p>
       {imageUrls.length > 0 ? (
         <div
@@ -195,6 +209,7 @@ function NoteWithLinks({ note }: { note: string }) {
             flexWrap: "wrap",
             gap: 8,
             marginTop: 10,
+            alignItems: "flex-start",
           }}
         >
           {imageUrls.map((url) => (
@@ -202,8 +217,9 @@ function NoteWithLinks({ note }: { note: string }) {
               key={url}
               href={url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               title="Open design image"
+              style={{ display: "inline-block" }}
             >
               <img
                 src={url}
@@ -218,6 +234,18 @@ function NoteWithLinks({ note }: { note: string }) {
                   background: "#fff",
                 }}
               />
+              <span
+                style={{
+                  display: "block",
+                  marginTop: 4,
+                  color: "#2c6ecb",
+                  textDecoration: "underline",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                Open design
+              </span>
             </a>
           ))}
         </div>
