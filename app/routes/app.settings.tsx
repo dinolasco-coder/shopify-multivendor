@@ -46,7 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionScopes,
     hasFulfillmentScopes: envHasFulfillment,
     sessionHasFulfillmentScopes: sessionHasFulfillment,
-    reauthUrl: `${base}/auth?shop=${encodeURIComponent(session.shop)}`,
+    reauthUrl: `/app/reauth`,
   };
 };
 
@@ -282,8 +282,6 @@ export default function SettingsPage() {
             <a
               className="nx-btn"
               href={reauthUrl}
-              target="_top"
-              rel="noreferrer"
               style={{
                 display: "inline-flex",
                 textDecoration: "none",
