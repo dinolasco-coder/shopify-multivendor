@@ -279,6 +279,11 @@ export default function SettingsPage() {
               Shop token scopes:{" "}
               {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
             </p>
+            <p style={{ fontSize: 13, color: "#6d7175" }}>
+              Click the button — Shopify will ask you to approve permissions,
+              then return you to Settings. If you see a blank grey page, wait
+              for the latest deploy and try again.
+            </p>
             <a
               className="nx-btn"
               href={reauthUrl}
