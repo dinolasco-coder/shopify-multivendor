@@ -46,7 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionScopes,
     hasFulfillmentScopes: envHasFulfillment,
     sessionHasFulfillmentScopes: sessionHasFulfillment,
-    reauthUrl: `/app/reauth`,
+    reauthUrl: `${base}/reauth?shop=${encodeURIComponent(session.shop)}`,
   };
 };
 
@@ -280,13 +280,14 @@ export default function SettingsPage() {
               {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
             </p>
             <p style={{ fontSize: 13, color: "#6d7175" }}>
-              Click the button — Shopify will ask you to approve permissions,
-              then return you to Settings. If you see a blank grey page, wait
-              for the latest deploy and try again.
+              This opens Shopify in the full window so you can approve
+              permissions. After approving, open Multivendor → Settings again.
             </p>
             <a
               className="nx-btn"
               href={reauthUrl}
+              target="_top"
+              rel="noreferrer"
               style={{
                 display: "inline-flex",
                 textDecoration: "none",
