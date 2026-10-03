@@ -19,23 +19,36 @@ function appBaseUrl(request: Request) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, scopes } = await authenticate.admin(request);
   const settings = await getOrCreateSettings(session.shop);
   const base = appBaseUrl(request);
   const scopesConfigured = (process.env.SCOPES || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const sessionScopes = (session.scope || "")
+  let sessionScopes = (session.scope || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  try {
+    const detail = await scopes.query();
+    if (detail.granted?.length) sessionScopes = detail.granted;
+  } catch {
+    // Fall back to session.scope if Admin API query fails.
+  }
   const need = [
     "read_merchant_managed_fulfillment_orders",
     "write_merchant_managed_fulfillment_orders",
   ];
   const envHasFulfillment = need.every((s) => scopesConfigured.includes(s));
   const sessionHasFulfillment = need.every((s) => sessionScopes.includes(s));
+
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const install = new URL(`https://${session.shop}/admin/oauth/install`);
+  install.searchParams.set("client_id", apiKey);
+  if (scopesConfigured.length) {
+    install.searchParams.set("scope", scopesConfigured.join(","));
+  }
 
   return {
     settings,
@@ -46,7 +59,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionScopes,
     hasFulfillmentScopes: envHasFulfillment,
     sessionHasFulfillmentScopes: sessionHasFulfillment,
-    reauthUrl: `${base}/reauth?shop=${encodeURIComponent(session.shop)}`,
+    // Full-window Shopify install URL (updates required scopes). Avoid /auth JSON "null".
+    reauthUrl: install.toString(),
   };
 };
 
@@ -280,8 +294,8 @@ export default function SettingsPage() {
               {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
             </p>
             <p style={{ fontSize: 13, color: "#6d7175" }}>
-              This opens Shopify in the full window so you can approve
-              permissions. After approving, open Multivendor → Settings again.
+              Opens Shopify’s permission screen in the full window. Approve the
+              fulfillment scopes, then come back to Settings (refresh if needed).
             </p>
             <a
               className="nx-btn"
