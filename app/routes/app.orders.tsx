@@ -26,6 +26,9 @@ type ShopifyOrderRow = {
   displayFinancialStatus: string;
   customerName: string;
   customerEmail: string;
+  customerPhone: string;
+  /** Lowercased blob for client search (order #, customer, products, vendors). */
+  searchText: string;
   total: number;
   currency: string;
   itemCount: number;
@@ -56,9 +59,11 @@ async function fetchShopifyOrders(admin: {
           customer {
             displayName
             defaultEmailAddress { emailAddress }
+            defaultPhoneNumber { phoneNumber }
           }
           shippingAddress {
             name
+            phone
           }
           fulfillments(first: 5) {
             nodes {
@@ -67,7 +72,13 @@ async function fetchShopifyOrders(admin: {
             }
           }
           lineItems(first: 50) {
-            nodes { quantity }
+            nodes {
+              quantity
+              title
+              variantTitle
+              vendor
+              sku
+            }
           }
         }
       }
@@ -92,17 +103,27 @@ async function fetchShopifyOrders(admin: {
       customer?: {
         displayName?: string;
         defaultEmailAddress?: { emailAddress?: string } | null;
+        defaultPhoneNumber?: { phoneNumber?: string } | null;
       } | null;
-      shippingAddress?: { name?: string } | null;
+      shippingAddress?: { name?: string; phone?: string | null } | null;
       fulfillments?: {
         nodes?: Array<{
           status?: string;
           trackingInfo?: Array<{ company?: string; number?: string }>;
         }>;
       };
-      lineItems?: { nodes?: Array<{ quantity?: number }> };
+      lineItems?: {
+        nodes?: Array<{
+          quantity?: number;
+          title?: string | null;
+          variantTitle?: string | null;
+          vendor?: string | null;
+          sku?: string | null;
+        }>;
+      };
     }) => {
-      const itemCount = (o.lineItems?.nodes ?? []).reduce(
+      const lineNodes = o.lineItems?.nodes ?? [];
+      const itemCount = lineNodes.reduce(
         (sum, li) => sum + (li.quantity ?? 0),
         0,
       );
@@ -123,19 +144,44 @@ async function fetchShopifyOrders(admin: {
         delivery = "Requested";
       }
 
+      const name = o.name || o.id;
+      const customerName =
+        o.customer?.displayName || o.shippingAddress?.name || "Guest";
+      const customerEmail =
+        o.customer?.defaultEmailAddress?.emailAddress || "";
+      const customerPhone =
+        o.customer?.defaultPhoneNumber?.phoneNumber ||
+        o.shippingAddress?.phone ||
+        "";
+      const productBits = lineNodes
+        .flatMap((li) => [li.title, li.variantTitle, li.vendor, li.sku])
+        .filter(Boolean)
+        .join(" ");
+      const searchText = [
+        name,
+        customerName,
+        customerEmail,
+        customerPhone,
+        productBits,
+        delivery,
+        tracking?.number,
+        tracking?.company,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
       return {
         id: o.id,
-        name: o.name || o.id,
+        name,
         createdAt: o.createdAt || "",
         cancelledAt: o.cancelledAt ?? null,
         displayFulfillmentStatus: o.displayFulfillmentStatus || "UNFULFILLED",
         displayFinancialStatus: o.displayFinancialStatus || "PENDING",
-        customerName:
-          o.customer?.displayName ||
-          o.shippingAddress?.name ||
-          "Guest",
-        customerEmail:
-          o.customer?.defaultEmailAddress?.emailAddress || "",
+        customerName,
+        customerEmail,
+        customerPhone,
+        searchText,
         total: Number(o.currentTotalPriceSet?.shopMoney?.amount ?? 0),
         currency:
           o.currentTotalPriceSet?.shopMoney?.currencyCode ||
@@ -345,9 +391,11 @@ export default function AdminOrdersPage() {
         .join(" ")
         .toLowerCase();
       return (
+        (order.searchText || "").includes(q) ||
         order.name.toLowerCase().includes(q) ||
         order.customerName.toLowerCase().includes(q) ||
         order.customerEmail.toLowerCase().includes(q) ||
+        (order.customerPhone || "").toLowerCase().includes(q) ||
         sellers.includes(q)
       );
     });
@@ -396,7 +444,7 @@ export default function AdminOrdersPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your orders using order id, customer name, email or phone"
+              placeholder="Search order #, customer, email, phone, product, or seller"
             />
           </div>
           <Form method="post">
@@ -410,7 +458,11 @@ export default function AdminOrdersPage() {
         <div className="nx-table-wrap">
           {filtered.length === 0 ? (
             <div className="nx-empty">
-              No orders found. Place a checkout on the store, then click Sync.
+              {orders.length === 0
+                ? "No orders found. Place a checkout on the store, then click Sync."
+                : query.trim()
+                  ? `No orders match “${query.trim()}”. Clear search to see all ${orders.length} order(s).`
+                  : "No orders in this tab."}
             </div>
           ) : (
             <table className="nx-table">
