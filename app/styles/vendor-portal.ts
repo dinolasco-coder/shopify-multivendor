@@ -21,6 +21,12 @@ export const vendorPortalStyles = `
     display: flex;
     flex-direction: column;
     padding: 16px 12px;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow-y: auto;
   }
   .sx-brand { padding: 8px 10px 20px; }
   .sx-brand__name { font-weight: 700; font-size: 15px; margin: 0; }
@@ -108,7 +114,16 @@ export const vendorPortalStyles = `
   .sx-mobile-nav { display: none; }
   @media (max-width: 860px) {
     .sx-shell { flex-direction: column; }
-    .sx-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--sx-border); padding: 12px; }
+    .sx-sidebar {
+      width: 100%;
+      height: auto;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-right: none;
+      border-bottom: 1px solid var(--sx-border);
+      padding: 12px;
+    }
     .sx-nav { flex-direction: row; flex-wrap: wrap; }
     .sx-nav__bottom { border-top: none; margin-top: 0; padding-top: 0; width: 100%; }
     .sx-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
