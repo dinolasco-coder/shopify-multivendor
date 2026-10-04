@@ -53,12 +53,10 @@ async function fetchShopifyOrders(admin: {
           displayFulfillmentStatus
           displayFinancialStatus
           currencyCode
+          email
+          phone
           currentTotalPriceSet {
             shopMoney { amount currencyCode }
-          }
-          customer {
-            displayName
-            defaultEmailAddress { emailAddress }
           }
           shippingAddress {
             name
@@ -101,13 +99,11 @@ async function fetchShopifyOrders(admin: {
       displayFulfillmentStatus?: string;
       displayFinancialStatus?: string;
       currencyCode?: string;
+      email?: string | null;
+      phone?: string | null;
       currentTotalPriceSet?: {
         shopMoney?: { amount?: string; currencyCode?: string };
       };
-      customer?: {
-        displayName?: string;
-        defaultEmailAddress?: { emailAddress?: string } | null;
-      } | null;
       shippingAddress?: { name?: string; phone?: string | null } | null;
       fulfillments?: Array<{
         status?: string;
@@ -147,11 +143,10 @@ async function fetchShopifyOrders(admin: {
       }
 
       const name = o.name || o.id;
-      const customerName =
-        o.customer?.displayName || o.shippingAddress?.name || "Guest";
-      const customerEmail =
-        o.customer?.defaultEmailAddress?.emailAddress || "";
-      const customerPhone = o.shippingAddress?.phone || "";
+      // Avoid Order.customer (needs read_customers). Use order + shipping fields.
+      const customerName = o.shippingAddress?.name || "Guest";
+      const customerEmail = o.email || "";
+      const customerPhone = o.phone || o.shippingAddress?.phone || "";
       const productBits = lineNodes
         .flatMap((li) => [
           li.name,
