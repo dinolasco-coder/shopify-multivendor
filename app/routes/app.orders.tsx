@@ -59,17 +59,15 @@ async function fetchShopifyOrders(admin: {
           customer {
             displayName
             defaultEmailAddress { emailAddress }
-            defaultPhoneNumber { phoneNumber }
           }
           shippingAddress {
             name
             phone
           }
+          # fulfillments is a list, not a connection (no nodes)
           fulfillments(first: 5) {
-            nodes {
-              status
-              trackingInfo { company number }
-            }
+            status
+            trackingInfo { company number }
           }
           lineItems(first: 50) {
             nodes {
@@ -78,6 +76,7 @@ async function fetchShopifyOrders(admin: {
               variantTitle
               vendor
               sku
+              name
             }
           }
         }
@@ -86,6 +85,11 @@ async function fetchShopifyOrders(admin: {
     { variables: { first: 50 } },
   );
   const json = await response.json();
+  if (json.errors?.length) {
+    throw new Error(
+      json.errors.map((e: { message: string }) => e.message).join(", "),
+    );
+  }
   const nodes = json.data?.orders?.nodes ?? [];
 
   return nodes.map(
@@ -103,15 +107,12 @@ async function fetchShopifyOrders(admin: {
       customer?: {
         displayName?: string;
         defaultEmailAddress?: { emailAddress?: string } | null;
-        defaultPhoneNumber?: { phoneNumber?: string } | null;
       } | null;
       shippingAddress?: { name?: string; phone?: string | null } | null;
-      fulfillments?: {
-        nodes?: Array<{
-          status?: string;
-          trackingInfo?: Array<{ company?: string; number?: string }>;
-        }>;
-      };
+      fulfillments?: Array<{
+        status?: string;
+        trackingInfo?: Array<{ company?: string; number?: string }>;
+      }>;
       lineItems?: {
         nodes?: Array<{
           quantity?: number;
@@ -119,6 +120,7 @@ async function fetchShopifyOrders(admin: {
           variantTitle?: string | null;
           vendor?: string | null;
           sku?: string | null;
+          name?: string | null;
         }>;
       };
     }) => {
@@ -127,7 +129,7 @@ async function fetchShopifyOrders(admin: {
         (sum, li) => sum + (li.quantity ?? 0),
         0,
       );
-      const fulfillment = o.fulfillments?.nodes?.[0];
+      const fulfillment = o.fulfillments?.[0];
       const tracking = fulfillment?.trackingInfo?.[0];
       let delivery = "—";
       if (o.cancelledAt) {
@@ -149,16 +151,20 @@ async function fetchShopifyOrders(admin: {
         o.customer?.displayName || o.shippingAddress?.name || "Guest";
       const customerEmail =
         o.customer?.defaultEmailAddress?.emailAddress || "";
-      const customerPhone =
-        o.customer?.defaultPhoneNumber?.phoneNumber ||
-        o.shippingAddress?.phone ||
-        "";
+      const customerPhone = o.shippingAddress?.phone || "";
       const productBits = lineNodes
-        .flatMap((li) => [li.title, li.variantTitle, li.vendor, li.sku])
+        .flatMap((li) => [
+          li.name,
+          li.title,
+          li.variantTitle,
+          li.vendor,
+          li.sku,
+        ])
         .filter(Boolean)
         .join(" ");
       const searchText = [
         name,
+        name.replace(/^#/, ""),
         customerName,
         customerEmail,
         customerPhone,
@@ -312,13 +318,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       error instanceof Error ? error.message : "Failed to sync recent orders.";
   }
 
-  const [orders, attributions] = await Promise.all([
-    fetchShopifyOrders(admin).catch((error) => {
-      console.error("Failed to load Shopify orders", error);
-      return [] as ShopifyOrderRow[];
-    }),
-    listAttributionsForShop(session.shop),
-  ]);
+  let orders: ShopifyOrderRow[] = [];
+  let listError: string | null = null;
+  try {
+    orders = await fetchShopifyOrders(admin);
+  } catch (error) {
+    console.error("Failed to load Shopify orders", error);
+    listError =
+      error instanceof Error ? error.message : "Failed to load Shopify orders.";
+  }
+
+  const attributions = await listAttributionsForShop(session.shop);
 
   const sellersByOrder: Record<
     string,
@@ -335,7 +345,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sellersByOrder[row.shopifyOrderId] = list;
   }
 
-  return { orders, sellersByOrder, syncError };
+  return {
+    orders,
+    sellersByOrder,
+    syncError: syncError || listError,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -376,6 +390,7 @@ export default function AdminOrdersPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const qBare = q.replace(/^#/, "");
     return orders.filter((order) => {
       if (tab === "unfulfilled") {
         if (order.cancelledAt) return false;
@@ -390,14 +405,8 @@ export default function AdminOrdersPage() {
         .map((s) => s.name)
         .join(" ")
         .toLowerCase();
-      return (
-        (order.searchText || "").includes(q) ||
-        order.name.toLowerCase().includes(q) ||
-        order.customerName.toLowerCase().includes(q) ||
-        order.customerEmail.toLowerCase().includes(q) ||
-        (order.customerPhone || "").toLowerCase().includes(q) ||
-        sellers.includes(q)
-      );
+      const hay = `${order.searchText || ""} ${sellers}`;
+      return hay.includes(q) || (qBare.length > 0 && hay.includes(qBare));
     });
   }, [orders, query, sellersByOrder, tab]);
 
