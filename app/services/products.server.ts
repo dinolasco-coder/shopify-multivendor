@@ -131,7 +131,7 @@ export async function createVendorProduct(
     await attachProductImages(admin, product.id, input.images);
   }
 
-  await publishProductToOnlineStore(admin, product.id);
+  await publishProductToStorefronts(admin, product.id);
   await setProductVendorMetafield(admin, product.id, input.vendorId);
 
   return product;
@@ -422,36 +422,156 @@ export async function ensureVendorMetafieldsForVendor(
   return { checked: products.length, fixed };
 }
 
-async function publishProductToOnlineStore(
+function parsePublicationIdsFromEnv(): string[] {
+  return (process.env.PUBLISH_PUBLICATION_IDS || "")
+    .split(/[\s,]+/)
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+/** Match Online Store + Headless/Hydrogen via app handle/title (not catalog title). */
+function isTargetStorefrontApp(app?: {
+  title?: string | null;
+  handle?: string | null;
+} | null): boolean {
+  const handle = (app?.handle || "").toLowerCase();
+  const title = (app?.title || "").toLowerCase();
+  if (!handle && !title) return false;
+
+  if (
+    handle === "online_store" ||
+    handle.includes("online_store") ||
+    title === "online store" ||
+    title.includes("online store")
+  ) {
+    return true;
+  }
+
+  // Headless storefronts are separate publications; identify via owning app.
+  if (
+    handle === "headless" ||
+    handle.includes("headless") ||
+    handle.includes("hydrogen") ||
+    title.includes("headless") ||
+    title.includes("hydrogen")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+type AppNode = { title?: string | null; handle?: string | null };
+
+/**
+ * Online Store + every Headless/Hydrogen storefront publication.
+ * Catalog titles are often opaque ("Channel Catalog …") or custom storefront
+ * names, so we match AppCatalog.apps handle/title instead.
+ */
+async function resolveStorefrontPublicationIds(
   admin: AdminGraphql,
-  productId: string,
-) {
+): Promise<string[]> {
+  const fromEnv = parsePublicationIdsFromEnv();
+  if (fromEnv.length) return fromEnv;
+
   const pubsResponse = await admin.graphql(
     `#graphql
     query marketplacePublications {
-      publications(first: 20) {
+      publications(first: 50, catalogType: APP) {
         nodes {
           id
           name
+          catalog {
+            title
+            ... on AppCatalog {
+              apps(first: 10) {
+                nodes {
+                  title
+                  handle
+                }
+              }
+            }
+          }
+          app {
+            title
+            handle
+          }
         }
       }
     }`,
   );
   const pubsJson = await pubsResponse.json();
-  const publications = pubsJson.data?.publications?.nodes ?? [];
-  const onlineStore =
-    publications.find(
-      (p: { name?: string }) =>
-        /online store/i.test(p.name ?? "") || p.name === "Online Store",
-    ) ?? null;
-
-  if (!onlineStore?.id) {
-    console.error(
-      "Could not find Online Store publication; product left unpublished",
-      publications.map((p: { name?: string }) => p.name),
-    );
-    return;
+  if (pubsJson.errors?.length) {
+    console.error("marketplacePublications errors", pubsJson.errors);
   }
+
+  const publications: {
+    id?: string;
+    name?: string;
+    catalog?: {
+      title?: string;
+      apps?: { nodes?: AppNode[] };
+    } | null;
+    app?: AppNode | null;
+  }[] = pubsJson.data?.publications?.nodes ?? [];
+
+  const seen = new Set<string>();
+  const publicationIds: string[] = [];
+  const matched: { id: string; reason: string }[] = [];
+
+  for (const publication of publications) {
+    if (!publication.id || seen.has(publication.id)) continue;
+
+    const apps: AppNode[] = [
+      ...(publication.catalog?.apps?.nodes ?? []),
+      ...(publication.app ? [publication.app] : []),
+    ];
+    const appMatch = apps.find((app) => isTargetStorefrontApp(app));
+
+    // Legacy name fallback (deprecated) — Online Store often still appears here.
+    const nameMatch =
+      /online store/i.test(publication.name ?? "") ||
+      /headless|hydrogen/i.test(publication.name ?? "") ||
+      /online store/i.test(publication.catalog?.title ?? "") ||
+      /headless|hydrogen/i.test(publication.catalog?.title ?? "");
+
+    if (!appMatch && !nameMatch) continue;
+
+    seen.add(publication.id);
+    publicationIds.push(publication.id);
+    matched.push({
+      id: publication.id,
+      reason: appMatch
+        ? `app:${appMatch.handle || appMatch.title}`
+        : `name:${publication.name || publication.catalog?.title}`,
+    });
+  }
+
+  if (!publicationIds.length) {
+    console.error("Could not find Online Store or Headless publications", {
+      publications: publications.map((p) => ({
+        id: p.id,
+        name: p.name,
+        catalog: p.catalog?.title,
+        apps: (p.catalog?.apps?.nodes ?? []).map(
+          (a) => a.handle || a.title,
+        ),
+        app: p.app?.handle || p.app?.title,
+      })),
+    });
+  } else {
+    console.info("Publishing product to publications", matched);
+  }
+
+  return publicationIds;
+}
+
+async function publishProductToStorefronts(
+  admin: AdminGraphql,
+  productId: string,
+) {
+  const publicationIds = await resolveStorefrontPublicationIds(admin);
+  if (!publicationIds.length) return;
 
   const publishResponse = await admin.graphql(
     `#graphql
@@ -463,11 +583,14 @@ async function publishProductToOnlineStore(
     {
       variables: {
         id: productId,
-        input: [{ publicationId: onlineStore.id }],
+        input: publicationIds.map((publicationId) => ({ publicationId })),
       },
     },
   );
   const publishJson = await publishResponse.json();
+  if (publishJson.errors?.length) {
+    console.error("publishablePublish graphql errors", publishJson.errors);
+  }
   const errors = publishJson.data?.publishablePublish?.userErrors ?? [];
   if (errors.length) {
     console.error("publishablePublish errors", errors);
