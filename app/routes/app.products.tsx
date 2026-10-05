@@ -25,11 +25,6 @@ function shopAdminProductsUrl() {
   return "shopify://admin/products";
 }
 
-function shopAdminProductUrl(productGid: string) {
-  const numericId = productGid.split("/").pop() || "";
-  return `shopify://admin/products/${numericId}`;
-}
-
 function shopAdminNewProductUrl() {
   return "shopify://admin/products/new";
 }
@@ -140,7 +135,7 @@ const styles = `
     display: flex; align-items: center; justify-content: center; color: #8c9196; font-size: 11px;
   }
   .nx-primary { font-weight: 700; margin: 0 0 2px; }
-  .nx-product-link { font-weight: 700; color: #1a1a1a; text-decoration: none; }
+  .nx-product-link { font-weight: 700; color: #1a1a1a; text-decoration: none; margin: 0 0 2px; }
   .nx-product-link:hover { text-decoration: underline; }
   .nx-secondary { margin: 0; color: #6d7175; font-size: 12px; }
   .nx-badge {
@@ -336,7 +331,6 @@ export default function AdminProductsPage() {
                   const open = expandedId === product.id;
                   const isDraft =
                     String(product.status || "").toUpperCase() === "DRAFT";
-                  const adminUrl = shopAdminProductUrl(product.id);
 
                   return (
                     <tr key={product.id}>
@@ -352,36 +346,31 @@ export default function AdminProductsPage() {
                             <div className="nx-thumb nx-thumb--empty">No img</div>
                           )}
                           <div>
-                            <a
-                              className="nx-product-link"
-                              href={adminUrl}
-                              target="_top"
-                            >
-                              {product.title}
-                            </a>
-                            <p className="nx-secondary">
-                              Current inventory is {inventory} across{" "}
-                              {variantCount} variant
-                              {variantCount === 1 ? "" : "s"}
-                            </p>
-                            {isDraft && (
+                            {isDraft ? (
                               <button
                                 type="button"
-                                className="nx-secondary"
+                                className="nx-product-link"
                                 style={{
                                   background: "none",
                                   border: "none",
                                   padding: 0,
                                   cursor: "pointer",
-                                  marginTop: 4,
+                                  textAlign: "left",
                                 }}
                                 onClick={() =>
                                   setExpandedId(open ? null : product.id)
                                 }
                               >
-                                {open ? "Hide approval" : "Show approval actions"}
+                                {product.title}
                               </button>
+                            ) : (
+                              <p className="nx-product-link">{product.title}</p>
                             )}
+                            <p className="nx-secondary">
+                              Current inventory is {inventory} across{" "}
+                              {variantCount} variant
+                              {variantCount === 1 ? "" : "s"}
+                            </p>
                             {open && isDraft && (
                               <div className="nx-row-actions">
                                 <Form method="post">
