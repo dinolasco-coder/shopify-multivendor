@@ -122,15 +122,7 @@ export default function VendorProducts() {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 18,
-        }}
-      >
+      <div className="sx-page-head">
         <div>
           <h1 className="sx-title">Products</h1>
           <p className="sx-sub">Add, edit, or remove your listings</p>

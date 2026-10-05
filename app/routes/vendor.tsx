@@ -1,5 +1,12 @@
 import type { LinksFunction, LoaderFunctionArgs } from "react-router";
-import { Link, Outlet, redirect, useLoaderData, useLocation } from "react-router";
+import {
+  Link,
+  Outlet,
+  redirect,
+  useLoaderData,
+  useLocation,
+} from "react-router";
+import { useEffect, useState } from "react";
 import { AppProvider } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import {
@@ -59,13 +66,19 @@ function NavLink({
   to,
   label,
   active,
+  onNavigate,
 }: {
   to: string;
   label: string;
   active: boolean;
+  onNavigate?: () => void;
 }) {
   return (
-    <Link to={to} className={active ? "is-active" : undefined}>
+    <Link
+      to={to}
+      className={active ? "is-active" : undefined}
+      onClick={onNavigate}
+    >
       {label}
     </Link>
   );
@@ -74,6 +87,20 @@ function NavLink({
 export default function VendorLayout() {
   const data = useLoaderData<typeof loader>();
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
 
   if (data.publicRoute || !data.vendor) {
     return (
@@ -109,6 +136,7 @@ export default function VendorLayout() {
       : vendor.status === "pending"
         ? "warn"
         : "bad";
+  const closeMenu = () => setMenuOpen(false);
 
   return (
     <AppProvider i18n={{}}>
@@ -120,40 +148,68 @@ export default function VendorLayout() {
         }}
       />
       <div className="sx-shell">
-        <aside className="sx-sidebar">
+        <button
+          type="button"
+          className={`sx-backdrop${menuOpen ? " is-open" : ""}`}
+          aria-label="Close menu"
+          onClick={closeMenu}
+        />
+        <aside className={`sx-sidebar${menuOpen ? " is-open" : ""}`}>
           <div className="sx-brand">
-            <p className="sx-brand__name">Seller portal</p>
-            <p className="sx-brand__sub">{data.shopLabel}</p>
+            <div>
+              <p className="sx-brand__name">Seller portal</p>
+              <p className="sx-brand__sub">{data.shopLabel}</p>
+            </div>
+            <button
+              type="button"
+              className="sx-sidebar__close"
+              aria-label="Close menu"
+              onClick={closeMenu}
+            >
+              ×
+            </button>
           </div>
           <nav className="sx-nav">
-            <NavLink to="/vendor" label="Home" active={path === "/vendor"} />
+            <NavLink
+              to="/vendor"
+              label="Home"
+              active={path === "/vendor"}
+              onNavigate={closeMenu}
+            />
             <NavLink
               to="/vendor/orders"
               label="Orders"
               active={path.startsWith("/vendor/orders")}
+              onNavigate={closeMenu}
             />
             <NavLink
               to="/vendor/customized"
               label="Customized"
               active={path.startsWith("/vendor/customized")}
+              onNavigate={closeMenu}
             />
             <NavLink
               to="/vendor/products"
               label="Products"
               active={path.startsWith("/vendor/products")}
+              onNavigate={closeMenu}
             />
             <NavLink
               to="/vendor/earnings"
               label="Payouts"
               active={path.startsWith("/vendor/earnings")}
+              onNavigate={closeMenu}
             />
             <NavLink
               to="/vendor/sales"
               label="Sales"
               active={path.startsWith("/vendor/sales")}
+              onNavigate={closeMenu}
             />
             <div className="sx-nav__bottom">
-              <Link to="/vendor/logout">Log out</Link>
+              <Link to="/vendor/logout" onClick={closeMenu}>
+                Log out
+              </Link>
             </div>
           </nav>
         </aside>
@@ -161,8 +217,17 @@ export default function VendorLayout() {
         <div className="sx-main">
           <header className="sx-top">
             <div className="sx-top__user">
+              <button
+                type="button"
+                className="sx-menu-btn"
+                aria-label="Open menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen(true)}
+              >
+                <span />
+              </button>
               <div className="sx-avatar">{initial}</div>
-              <div>
+              <div className="sx-top__meta">
                 <p className="sx-top__name">{vendor.name}</p>
                 <p className="sx-top__email">{vendor.email}</p>
               </div>

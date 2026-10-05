@@ -36,10 +36,11 @@ export function VendorAuthShell({ children }: { children: ReactNode }) {
       <style>{`
         .vendor-auth-shell {
           min-height: 100vh;
+          min-height: 100dvh;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 32px 16px;
+          padding: 24px 16px;
           background: #f6f6f7;
           box-sizing: border-box;
         }
@@ -51,6 +52,11 @@ export function VendorAuthShell({ children }: { children: ReactNode }) {
           border-radius: 12px;
           padding: 32px 28px;
           box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+          box-sizing: border-box;
+        }
+        @media (max-width: 480px) {
+          .vendor-auth-shell { padding: 16px 12px; align-items: flex-start; padding-top: 28px; }
+          .vendor-auth-card { padding: 24px 18px; border-radius: 10px; }
         }
         .vendor-auth-brand {
           display: flex;
