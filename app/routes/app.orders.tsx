@@ -17,17 +17,14 @@ import { listAttributionsForShop } from "../models/attribution.server";
 import { syncRecentOrders } from "../services/commission.server";
 import { formatMoney } from "../utils/money";
 
-function shopAdminBase(shop: string) {
-  const handle = shop
-    .replace(/^https?:\/\//, "")
-    .replace(/\.myshopify\.com$/i, "")
-    .split("/")[0];
-  return `https://admin.shopify.com/store/${handle}`;
+function shopifyAdminPath(path: string) {
+  const clean = path.replace(/^\//, "");
+  return `shopify://admin/${clean}`;
 }
 
-function shopifyOrderAdminUrl(shop: string, orderGid: string) {
+function shopifyOrderAdminUrl(orderGid: string) {
   const numericId = orderGid.split("/").pop() || "";
-  return `${shopAdminBase(shop)}/orders/${numericId}`;
+  return shopifyAdminPath(`orders/${numericId}`);
 }
 
 type ShopifyOrderRow = {
@@ -372,7 +369,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const tab = (url.searchParams.get("tab") || "all").toLowerCase();
   const searchQuery = orderSearchQueryForTab(tab);
-  const adminBase = shopAdminBase(session.shop);
 
   let syncError: string | null = null;
   try {
@@ -421,17 +417,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const shopifyOrdersUrl =
     tab === "unfulfilled"
-      ? `${adminBase}/orders?fulfillment_status=unfulfilled`
+      ? shopifyAdminPath("orders?fulfillment_status=unfulfilled")
       : tab === "cancelled"
-        ? `${adminBase}/orders?status=cancelled`
-        : `${adminBase}/orders`;
+        ? shopifyAdminPath("orders?status=cancelled")
+        : shopifyAdminPath("orders");
 
   return {
     orders,
     sellersByOrder,
     syncError: syncError || listError,
     shopifyOrdersUrl,
-    shop: session.shop,
     totalMatching,
     listCap: 100,
   };
@@ -467,7 +462,6 @@ export default function AdminOrdersPage() {
     sellersByOrder,
     syncError,
     shopifyOrdersUrl,
-    shop,
     totalMatching,
     listCap,
   } = useLoaderData<typeof loader>();
@@ -514,8 +508,7 @@ export default function AdminOrdersPage() {
             <a
               className="nx-link-btn"
               href={shopifyOrdersUrl}
-              target="_blank"
-              rel="noreferrer"
+              target="_top"
             >
               Open in Shopify Admin
             </a>
@@ -604,15 +597,14 @@ export default function AdminOrdersPage() {
                     order.displayFinancialStatus,
                   );
                   const open = expandedId === order.id;
-                  const adminOrderUrl = shopifyOrderAdminUrl(shop, order.id);
+                  const adminOrderUrl = shopifyOrderAdminUrl(order.id);
                   return (
                     <tr key={order.id}>
                       <td>
                         <a
                           className="nx-order-link"
                           href={adminOrderUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                          target="_top"
                         >
                           {order.name}
                         </a>

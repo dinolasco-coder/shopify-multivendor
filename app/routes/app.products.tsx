@@ -21,21 +21,17 @@ import {
 import { listVendors } from "../models/vendor.server";
 import { getOrCreateSettings } from "../models/settings.server";
 
-function shopAdminProductsUrl(shop: string) {
-  const handle = shop
-    .replace(/^https?:\/\//, "")
-    .replace(/\.myshopify\.com$/i, "")
-    .split("/")[0];
-  return `https://admin.shopify.com/store/${handle}/products`;
+function shopAdminProductsUrl() {
+  return "shopify://admin/products";
 }
 
-function shopAdminProductUrl(shop: string, productGid: string) {
+function shopAdminProductUrl(productGid: string) {
   const numericId = productGid.split("/").pop() || "";
-  return `${shopAdminProductsUrl(shop)}/${numericId}`;
+  return `shopify://admin/products/${numericId}`;
 }
 
-function shopAdminNewProductUrl(shop: string) {
-  return `${shopAdminProductsUrl(shop)}/new`;
+function shopAdminNewProductUrl() {
+  return "shopify://admin/products/new";
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -53,9 +49,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     products,
     vendorMap,
     requireProductApproval: settings.requireProductApproval,
-    shopifyProductsUrl: shopAdminProductsUrl(session.shop),
-    shopifyNewProductUrl: shopAdminNewProductUrl(session.shop),
-    shop: session.shop,
+    shopifyProductsUrl: shopAdminProductsUrl(),
+    shopifyNewProductUrl: shopAdminNewProductUrl(),
   };
 };
 
@@ -194,7 +189,6 @@ export default function AdminProductsPage() {
     requireProductApproval,
     shopifyProductsUrl,
     shopifyNewProductUrl,
-    shop,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -258,16 +252,14 @@ export default function AdminProductsPage() {
             <a
               className="nx-btn"
               href={shopifyProductsUrl}
-              target="_blank"
-              rel="noreferrer"
+              target="_top"
             >
               Open in Shopify Admin
             </a>
             <a
               className="nx-btn nx-btn--primary"
               href={shopifyNewProductUrl}
-              target="_blank"
-              rel="noreferrer"
+              target="_top"
             >
               + Add a new product
             </a>
@@ -344,7 +336,7 @@ export default function AdminProductsPage() {
                   const open = expandedId === product.id;
                   const isDraft =
                     String(product.status || "").toUpperCase() === "DRAFT";
-                  const adminUrl = shopAdminProductUrl(shop, product.id);
+                  const adminUrl = shopAdminProductUrl(product.id);
 
                   return (
                     <tr key={product.id}>
@@ -363,8 +355,7 @@ export default function AdminProductsPage() {
                             <a
                               className="nx-product-link"
                               href={adminUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                              target="_top"
                             >
                               {product.title}
                             </a>

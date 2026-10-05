@@ -17,12 +17,9 @@ function appBaseUrl(request: Request) {
   );
 }
 
-function shopAdminBase(shop: string) {
-  const handle = shop
-    .replace(/^https?:\/\//, "")
-    .replace(/\.myshopify\.com$/i, "")
-    .split("/")[0];
-  return `https://admin.shopify.com/store/${handle}`;
+function shopifyAdminPath(path: string) {
+  const clean = path.replace(/^\//, "");
+  return `shopify://admin/${clean}`;
 }
 
 async function fetchShopDashboard(admin: {
@@ -65,7 +62,6 @@ async function fetchShopDashboard(admin: {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
-  const adminBase = shopAdminBase(shop);
 
   const [statusCounts, sales, shopInfo, products, balances, settings] =
     await Promise.all([
@@ -114,8 +110,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     payoutOwed,
     defaultCommissionPercent: settings.defaultCommissionPercent,
     vendorPortalUrl: `${appBaseUrl(request)}/vendor/login`,
-    shopifyUnfulfilledOrdersUrl: `${adminBase}/orders?fulfillment_status=unfulfilled`,
-    shopifyActiveProductsUrl: `${adminBase}/products?selectedView=all&status=ACTIVE`,
+    shopifyUnfulfilledOrdersUrl: shopifyAdminPath(
+      "orders?fulfillment_status=unfulfilled",
+    ),
+    shopifyActiveProductsUrl: shopifyAdminPath(
+      "products?selectedView=all&status=ACTIVE",
+    ),
   };
 };
 
@@ -237,8 +237,7 @@ export default function Dashboard() {
           <a
             className="nx-metric"
             href={data.shopifyUnfulfilledOrdersUrl}
-            target="_blank"
-            rel="noreferrer"
+            target="_top"
           >
             <p className="nx-metric__label">Unfulfilled orders</p>
             <p className="nx-metric__value">{data.unfulfilledOrders}</p>
@@ -250,8 +249,7 @@ export default function Dashboard() {
           <a
             className="nx-metric"
             href={data.shopifyActiveProductsUrl}
-            target="_blank"
-            rel="noreferrer"
+            target="_top"
           >
             <p className="nx-metric__label">Active products</p>
             <p className="nx-metric__value">{data.activeProducts}</p>
