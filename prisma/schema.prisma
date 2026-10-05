@@ -75,7 +75,7 @@ model OrderAttribution {
   lineItemsJson    String   // JSON details for display
   subtotal         Float
   commissionAmount Float
-  currency         String   @default("USD")
+  currency         String   @default("PHP")
   createdAt        DateTime @default(now())
   vendor           Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
@@ -89,7 +89,7 @@ model VendorPayout {
   shop      String
   vendorId  String
   amount    Float
-  currency  String   @default("USD")
+  currency  String   @default("PHP")
   note      String?
   reference String?
   paidAt    DateTime @default(now())

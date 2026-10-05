@@ -1,10 +1,13 @@
-export function formatMoney(amount: number, currency = "USD") {
+export const DEFAULT_CURRENCY = "PHP";
+
+export function formatMoney(amount: number, currency = DEFAULT_CURRENCY) {
+  const code = (currency || DEFAULT_CURRENCY).toUpperCase();
   try {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-PH", {
       style: "currency",
-      currency,
+      currency: code,
     }).format(amount);
   } catch {
-    return `${currency} ${amount.toFixed(2)}`;
+    return `${code} ${amount.toFixed(2)}`;
   }
 }

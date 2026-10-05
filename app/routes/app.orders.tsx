@@ -205,7 +205,7 @@ async function fetchShopifyOrders(
         currency:
           o.currentTotalPriceSet?.shopMoney?.currencyCode ||
           o.currencyCode ||
-          "USD",
+          "PHP",
         itemCount,
         delivery,
       };

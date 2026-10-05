@@ -54,7 +54,7 @@ export async function attributeOrderFromWebhook(
 
   const shopifyOrderId =
     order.admin_graphql_api_id || `gid://shopify/Order/${order.id}`;
-  const currency = order.currency || "USD";
+  const currency = order.currency || "PHP";
 
   // Group line items by product, then resolve vendor metafield + image
   const byVendor = new Map<

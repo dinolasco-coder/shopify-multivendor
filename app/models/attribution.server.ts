@@ -71,7 +71,7 @@ export async function salesSummaryForVendor(vendorId: string) {
     revenue,
     commission,
     vendorEarnings: revenue - commission,
-    currency: rows[0]?.currency ?? "USD",
+    currency: rows[0]?.currency ?? "PHP",
   };
 }
 
@@ -84,6 +84,6 @@ export async function salesSummaryForShop(shop: string) {
     attributionCount: rows.length,
     revenue,
     commission,
-    currency: rows[0]?.currency ?? "USD",
+    currency: rows[0]?.currency ?? "PHP",
   };
 }

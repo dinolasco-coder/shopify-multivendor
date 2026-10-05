@@ -18,7 +18,7 @@ export async function createVendorPayout(data: {
       shop: data.shop,
       vendorId: data.vendorId,
       amount: roundMoney(data.amount),
-      currency: data.currency ?? "USD",
+      currency: data.currency ?? "PHP",
       note: data.note?.trim() || null,
       reference: data.reference?.trim() || null,
       paidAt: data.paidAt ?? new Date(),
@@ -81,7 +81,7 @@ export async function listVendorPayoutBalances(
     const currency =
       rows[0]?.currency ||
       payouts.find((p) => p.vendorId === vendor.id)?.currency ||
-      "USD";
+      "PHP";
 
     return {
       vendorId: vendor.id,
@@ -115,7 +115,7 @@ export async function getVendorEarningsSummary(vendorId: string) {
   const earned = revenue - commission;
   const paid = payouts.reduce((sum, p) => sum + p.amount, 0);
   const currency =
-    attributions[0]?.currency || payouts[0]?.currency || "USD";
+    attributions[0]?.currency || payouts[0]?.currency || "PHP";
 
   return {
     orderCount: attributions.length,

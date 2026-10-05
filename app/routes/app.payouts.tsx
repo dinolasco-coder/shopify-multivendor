@@ -145,7 +145,7 @@ export default function AdminPayoutsPage() {
   const totalEarned = balances.reduce((sum, b) => sum + b.earned, 0);
   const totalPaid = balances.reduce((sum, b) => sum + b.paid, 0);
   const totalBalance = balances.reduce((sum, b) => sum + Math.max(0, b.balance), 0);
-  const currency = balances.find((b) => b.currency)?.currency || "USD";
+  const currency = balances.find((b) => b.currency)?.currency || "PHP";
 
   return (
     <s-page heading="Payouts">
