@@ -5,7 +5,6 @@ import type {
 } from "react-router";
 import {
   Form,
-  Link,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -27,6 +26,10 @@ function shopAdminProductsUrl(shop: string) {
   return `https://admin.shopify.com/store/${handle}/products`;
 }
 
+function shopAdminNewProductUrl(shop: string) {
+  return `${shopAdminProductsUrl(shop)}/new`;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -43,6 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     vendorMap,
     requireProductApproval: settings.requireProductApproval,
     shopifyProductsUrl: shopAdminProductsUrl(session.shop),
+    shopifyNewProductUrl: shopAdminNewProductUrl(session.shop),
   };
 };
 
@@ -178,6 +182,7 @@ export default function AdminProductsPage() {
     vendorMap,
     requireProductApproval,
     shopifyProductsUrl,
+    shopifyNewProductUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -241,9 +246,14 @@ export default function AdminProductsPage() {
             <a className="nx-btn" href={shopifyProductsUrl} target="_blank" rel="noreferrer">
               Import products
             </a>
-            <Link className="nx-btn nx-btn--primary" to="/app/products/new">
+            <a
+              className="nx-btn nx-btn--primary"
+              href={shopifyNewProductUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               + Add a new product
-            </Link>
+            </a>
           </div>
         </div>
 
