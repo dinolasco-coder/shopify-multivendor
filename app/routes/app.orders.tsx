@@ -17,19 +17,6 @@ import { listAttributionsForShop } from "../models/attribution.server";
 import { syncRecentOrders } from "../services/commission.server";
 import { formatMoney } from "../utils/money";
 
-function shopAdminBase(shop: string) {
-  const handle = shop
-    .replace(/^https?:\/\//, "")
-    .replace(/\.myshopify\.com$/i, "")
-    .split("/")[0];
-  return `https://admin.shopify.com/store/${handle}`;
-}
-
-function shopifyOrderAdminUrl(shop: string, orderGid: string) {
-  const numericId = orderGid.split("/").pop() || "";
-  return `${shopAdminBase(shop)}/orders/${numericId}`;
-}
-
 type ShopifyOrderRow = {
   id: string;
   name: string;
@@ -75,8 +62,8 @@ async function fetchShopifyOrders(admin: {
             name
             phone
           }
-          # fulfillments may be a bare list depending on API version
-          fulfillments {
+          # fulfillments is a list, not a connection (no nodes)
+          fulfillments(first: 5) {
             status
             trackingInfo { company number }
           }
@@ -266,21 +253,7 @@ function badgeTone(kind: "fulfillment" | "payment", status: string) {
 
 const styles = `
   .nx-orders { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; }
-  .nx-orders__head {
-    display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
-    margin-bottom: 18px; flex-wrap: wrap;
-  }
-  .nx-orders__title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
-  .nx-orders__actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .nx-link-btn {
-    border: 1px solid #c9cccf; background: #fff; color: #202223; border-radius: 8px;
-    padding: 8px 12px; font-size: 13px; font-weight: 600; text-decoration: none;
-    display: inline-flex; align-items: center;
-  }
-  .nx-order-link {
-    font-weight: 700; color: #1a1a1a; text-decoration: none;
-  }
-  .nx-order-link:hover { text-decoration: underline; }
+  .nx-orders__title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 18px; }
   .nx-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
   .nx-tab {
     border: none; background: transparent; padding: 8px 14px; border-radius: 8px;
@@ -350,19 +323,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       error instanceof Error ? error.message : "Failed to load Shopify orders.";
   }
 
-  const attributions = await listAttributionsForShop(session.shop).catch(
-    (error) => {
-      console.error("Failed to load order attributions", error);
-      return [] as Awaited<ReturnType<typeof listAttributionsForShop>>;
-    },
-  );
+  const attributions = await listAttributionsForShop(session.shop);
 
   const sellersByOrder: Record<
     string,
     Array<{ name: string; subtotal: number; commission: number; currency: string }>
   > = {};
   for (const row of attributions) {
-    if (!row.vendor?.name) continue;
     const list = sellersByOrder[row.shopifyOrderId] ?? [];
     list.push({
       name: row.vendor.name,
@@ -377,9 +344,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orders,
     sellersByOrder,
     syncError: syncError || listError,
-    shopifyOrdersUrl: `${shopAdminBase(session.shop)}/orders`,
-    shopifyUnfulfilledOrdersUrl: `${shopAdminBase(session.shop)}/orders?fulfillment_status=unfulfilled`,
-    shop: session.shop,
   };
 };
 
@@ -408,14 +372,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminOrdersPage() {
-  const {
-    orders,
-    sellersByOrder,
-    syncError,
-    shopifyOrdersUrl,
-    shopifyUnfulfilledOrdersUrl,
-    shop,
-  } = useLoaderData<typeof loader>();
+  const { orders, sellersByOrder, syncError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -454,26 +411,11 @@ export default function AdminOrdersPage() {
     setSearchParams(params, { replace: true });
   }
 
-  const shopifyListUrl =
-    tab === "unfulfilled" ? shopifyUnfulfilledOrdersUrl : shopifyOrdersUrl;
-
   return (
     <s-page heading="Orders">
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="nx-orders">
-        <div className="nx-orders__head">
-          <h1 className="nx-orders__title">Orders</h1>
-          <div className="nx-orders__actions">
-            <a
-              className="nx-link-btn"
-              href={shopifyListUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open in Shopify Admin
-            </a>
-          </div>
-        </div>
+        <h1 className="nx-orders__title">Orders</h1>
 
         {syncError && <div className="nx-banner err">{syncError}</div>}
         {actionData && "error" in actionData && actionData.error && (
@@ -550,47 +492,38 @@ export default function AdminOrdersPage() {
                     order.displayFinancialStatus,
                   );
                   const open = expandedId === order.id;
-                  const adminOrderUrl = shopifyOrderAdminUrl(shop, order.id);
                   return (
                     <tr key={order.id}>
                       <td>
-                        <a
-                          className="nx-order-link"
-                          href={adminOrderUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          type="button"
+                          className="nx-primary"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            textAlign: "left",
+                          }}
+                          onClick={() =>
+                            setExpandedId(open ? null : order.id)
+                          }
                         >
                           {order.name}
-                        </a>
+                        </button>
                         <p className="nx-secondary">
                           Created on {formatCreatedOn(order.createdAt)}
                         </p>
                         {sellers.length > 0 && (
-                          <button
-                            type="button"
-                            className="nx-sellers"
-                            style={{
-                              background: "none",
-                              border: "none",
-                              padding: 0,
-                              cursor: "pointer",
-                              textAlign: "left",
-                            }}
-                            onClick={() =>
-                              setExpandedId(open ? null : order.id)
-                            }
-                          >
+                          <p className="nx-sellers">
                             Seller{sellers.length > 1 ? "s" : ""}:{" "}
                             {sellers.map((s) => s.name).join(", ")}
-                          </button>
+                          </p>
                         )}
                         {open && sellers.length > 0 && (
                           <div style={{ marginTop: 8 }}>
                             {sellers.map((s) => (
-                              <p
-                                className="nx-secondary"
-                                key={`${order.id}-${s.name}`}
-                              >
+                              <p className="nx-secondary" key={`${order.id}-${s.name}`}>
                                 {s.name}: {formatMoney(s.subtotal, s.currency)}{" "}
                                 (commission{" "}
                                 {formatMoney(s.commission, s.currency)})

@@ -65,16 +65,12 @@ export async function createVendorProduct(
 
   const variant = product.variants?.nodes?.[0];
   if (variant?.id) {
-    const location = await resolveInventoryLocation(admin);
-    const qty = Math.max(0, Math.floor(input.inventoryQuantity));
-
     const priceResponse = await admin.graphql(
       `#graphql
       mutation marketplaceVariantUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
         productVariantsBulkUpdate(productId: $productId, variants: $variants) {
           productVariants {
             id
-            availableForSale
             inventoryItem { id }
           }
           userErrors { field message }
@@ -87,8 +83,6 @@ export async function createVendorProduct(
             {
               id: variant.id,
               price: input.price,
-              // Keep purchasable while inventory propagates to the storefront/cart.
-              inventoryPolicy: "CONTINUE",
               inventoryItem: { tracked: true },
             },
           ],
@@ -124,7 +118,13 @@ export async function createVendorProduct(
       );
     }
 
-    await setInventoryQuantity(admin, inventoryItemId, qty, location.id);
+    if (input.inventoryQuantity >= 0) {
+      await setInventoryQuantity(
+        admin,
+        inventoryItemId,
+        input.inventoryQuantity,
+      );
+    }
   }
 
   if (input.images?.length) {
@@ -709,11 +709,8 @@ async function setInventoryQuantity(
   admin: AdminGraphql,
   inventoryItemId: string,
   quantity: number,
-  locationId?: string,
 ) {
-  const primary = locationId
-    ? { id: locationId }
-    : await resolveInventoryLocation(admin);
+  const primary = await resolveInventoryLocation(admin);
   const qty = Math.max(0, Math.floor(quantity));
 
   const levelsResponse = await admin.graphql(
@@ -773,19 +770,18 @@ async function setInventoryQuantity(
     );
   }
 
-  // Activate at shop location and seed available qty when possible.
+  // Activate at shop location without setting qty (qty set below).
+  // Passing `available` fails when the item is already active there.
   if (!stockedLocationIds.has(primary.id)) {
     const activateResponse = await admin.graphql(
       `#graphql
       mutation marketplaceActivateInventory(
         $inventoryItemId: ID!
         $locationId: ID!
-        $available: Int
       ) {
         inventoryActivate(
           inventoryItemId: $inventoryItemId
           locationId: $locationId
-          available: $available
         ) {
           userErrors { field message }
         }
@@ -794,7 +790,6 @@ async function setInventoryQuantity(
         variables: {
           inventoryItemId,
           locationId: primary.id,
-          available: qty,
         },
       },
     );
@@ -818,7 +813,6 @@ async function setInventoryQuantity(
         activateErrors.map((e: { message: string }) => e.message).join(", "),
       );
     }
-    // If activate seeded qty successfully, still run set below for consistency.
   }
 
   // Set absolute quantity ONLY on the shop location (reliable for checkout).
@@ -935,7 +929,6 @@ export async function listMarketplaceProducts(
           handle
           featuredImage { url altText }
           totalInventory
-          vendor
           variantsCount {
             count
           }

@@ -1,9 +1,6 @@
 export const VENDOR_METAFIELD_NAMESPACE = "marketplace";
 export const VENDOR_METAFIELD_KEY = "vendor_id";
 
-/** Metafield value for products created by the shop admin (not a seller). */
-export const ADMIN_STORE_VENDOR_ID = "__admin__";
-
 /** App-owned metafield namespace key used in Admin GraphQL ($app:marketplace) */
 export const VENDOR_METAFIELD_NAMESPACE_APP = "$app:marketplace";
 
