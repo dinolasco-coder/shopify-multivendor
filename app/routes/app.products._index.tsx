@@ -33,10 +33,6 @@ function shopAdminProductUrl(shop: string, productGid: string) {
   return `${shopAdminProductsUrl(shop)}/${numericId}`;
 }
 
-function shopAdminNewProductUrl(shop: string) {
-  return `${shopAdminProductsUrl(shop)}/new`;
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -53,7 +49,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     vendorMap,
     requireProductApproval: settings.requireProductApproval,
     shopifyProductsUrl: shopAdminProductsUrl(session.shop),
-    shopifyNewProductUrl: shopAdminNewProductUrl(session.shop),
     shop: session.shop,
   };
 };
@@ -194,7 +189,6 @@ export default function AdminProductsPage() {
     vendorMap,
     requireProductApproval,
     shopifyProductsUrl,
-    shopifyNewProductUrl,
     shop,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -269,14 +263,6 @@ export default function AdminProductsPage() {
               rel="noreferrer"
             >
               Open in Shopify Admin
-            </a>
-            <a
-              className="nx-btn"
-              href={shopifyNewProductUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Add in Shopify
             </a>
             <Link className="nx-btn nx-btn--primary" to="/app/products/new">
               + Add a new product

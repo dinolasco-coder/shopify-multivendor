@@ -7,7 +7,6 @@ import type {
 import {
   redirect,
   useActionData,
-  useLoaderData,
   useNavigation,
 } from "react-router";
 import { AppProvider } from "@shopify/polaris";
@@ -15,7 +14,6 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { createVendorProduct } from "../services/products.server";
-import { getOrCreateSettings } from "../models/settings.server";
 import { ADMIN_STORE_VENDOR_ID } from "../constants";
 import { AddProductWizard } from "../components/AddProductWizard";
 
@@ -24,14 +22,8 @@ export const links: LinksFunction = () => [
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const settings = await getOrCreateSettings(session.shop);
-  const shopLabel = session.shop.replace(/\.myshopify\.com$/i, "");
-
-  return {
-    requireProductApproval: settings.requireProductApproval,
-    shopLabel,
-  };
+  await authenticate.admin(request);
+  return {};
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -83,7 +75,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminAddProductPage() {
-  const { requireProductApproval } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
@@ -91,7 +82,7 @@ export default function AdminAddProductPage() {
     <s-page heading="Add product">
       <AppProvider i18n={{}}>
         <AddProductWizard
-          requireProductApproval={requireProductApproval}
+          requireProductApproval={false}
           error={actionData && "error" in actionData ? actionData.error : null}
           busy={navigation.state !== "idle"}
           backUrl="/app/products"
