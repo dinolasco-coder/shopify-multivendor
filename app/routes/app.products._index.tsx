@@ -28,6 +28,15 @@ function shopAdminProductsUrl(shop: string) {
   return `https://admin.shopify.com/store/${handle}/products`;
 }
 
+function shopAdminProductUrl(shop: string, productGid: string) {
+  const numericId = productGid.split("/").pop() || "";
+  return `${shopAdminProductsUrl(shop)}/${numericId}`;
+}
+
+function shopAdminNewProductUrl(shop: string) {
+  return `${shopAdminProductsUrl(shop)}/new`;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -44,6 +53,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     vendorMap,
     requireProductApproval: settings.requireProductApproval,
     shopifyProductsUrl: shopAdminProductsUrl(session.shop),
+    shopifyNewProductUrl: shopAdminNewProductUrl(session.shop),
+    shop: session.shop,
   };
 };
 
@@ -133,6 +144,10 @@ const styles = `
     display: flex; align-items: center; justify-content: center; color: #8c9196; font-size: 11px;
   }
   .nx-primary { font-weight: 700; margin: 0 0 2px; }
+  .nx-product-link {
+    font-weight: 700; color: #1a1a1a; text-decoration: none;
+  }
+  .nx-product-link:hover { text-decoration: underline; }
   .nx-secondary { margin: 0; color: #6d7175; font-size: 12px; }
   .nx-badge {
     display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px;
@@ -157,7 +172,7 @@ function statusBadge(status: string) {
   const s = String(status || "").toUpperCase();
   if (s === "ACTIVE") return { label: "Active", tone: "ok" };
   if (s === "DRAFT") return { label: "Draft", tone: "neutral" };
-  if (s === "ARCHIVED") return { label: "Rejected", tone: "bad" };
+  if (s === "ARCHIVED") return { label: "Archived", tone: "bad" };
   return { label: status, tone: "neutral" };
 }
 
@@ -179,6 +194,8 @@ export default function AdminProductsPage() {
     vendorMap,
     requireProductApproval,
     shopifyProductsUrl,
+    shopifyNewProductUrl,
+    shop,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -189,24 +206,26 @@ export default function AdminProductsPage() {
 
   const tab = (searchParams.get("tab") || "all").toLowerCase();
 
-  const marketplaceProducts = useMemo(
+  // Show all Shopify products (same source as Admin), not only marketplace-tagged ones.
+  const allProducts = useMemo(
     () =>
-      (products as Array<{
+      products as Array<{
         id: string;
         title: string;
         status: string;
         handle?: string;
+        vendor?: string | null;
         featuredImage?: { url?: string; altText?: string | null } | null;
         totalInventory?: number | null;
         variants?: { nodes?: unknown[] };
         metafield?: { value?: string } | null;
-      }>).filter((p) => p.metafield?.value),
+      }>,
     [products],
   );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return marketplaceProducts.filter((product) => {
+    return allProducts.filter((product) => {
       const status = String(product.status || "").toUpperCase();
       if (tab === "active" && status !== "ACTIVE") return false;
       if (tab === "rejected" && status !== "ARCHIVED") return false;
@@ -216,15 +235,19 @@ export default function AdminProductsPage() {
       }
       if (!q) return true;
       const vendorId = product.metafield?.value || "";
-      const seller = vendorMap[vendorId]?.name || "";
+      const seller =
+        vendorId === ADMIN_STORE_VENDOR_ID
+          ? "store admin"
+          : vendorMap[vendorId]?.name || product.vendor || "";
       return (
         product.title.toLowerCase().includes(q) ||
         product.id.toLowerCase().includes(q) ||
         (product.handle || "").toLowerCase().includes(q) ||
+        (product.vendor || "").toLowerCase().includes(q) ||
         seller.toLowerCase().includes(q)
       );
     });
-  }, [marketplaceProducts, query, tab, vendorMap, requireProductApproval]);
+  }, [allProducts, query, tab, vendorMap, requireProductApproval]);
 
   function setTab(next: string) {
     const params = new URLSearchParams(searchParams);
@@ -239,8 +262,21 @@ export default function AdminProductsPage() {
         <div className="nx-products__head">
           <h1 className="nx-products__title">Products</h1>
           <div className="nx-products__actions">
-            <a className="nx-btn" href={shopifyProductsUrl} target="_blank" rel="noreferrer">
-              Import products
+            <a
+              className="nx-btn"
+              href={shopifyProductsUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open in Shopify Admin
+            </a>
+            <a
+              className="nx-btn"
+              href={shopifyNewProductUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Add in Shopify
             </a>
             <Link className="nx-btn nx-btn--primary" to="/app/products/new">
               + Add a new product
@@ -261,7 +297,7 @@ export default function AdminProductsPage() {
               {[
                 { id: "all", label: "All" },
                 { id: "active", label: "Active" },
-                { id: "rejected", label: "Rejected" },
+                { id: "rejected", label: "Archived" },
                 { id: "draft", label: "Draft" },
                 { id: "pending", label: "Pending approval" },
               ].map((t) => (
@@ -280,7 +316,7 @@ export default function AdminProductsPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search your products by id, title or seller"
+                placeholder="Search products by title, id, or vendor"
               />
             </div>
           </div>
@@ -288,14 +324,30 @@ export default function AdminProductsPage() {
           {filtered.length === 0 ? (
             <div className="nx-empty">
               <p style={{ margin: "0 0 14px" }}>
-                No marketplace products found yet.
+                {allProducts.length === 0
+                  ? "No products found in Shopify yet."
+                  : "No products match this filter."}
               </p>
-              <Link className="nx-btn nx-btn--primary" to="/app/products/new">
-                + Add a new product
-              </Link>
-              <p style={{ margin: "14px 0 0", fontSize: 12 }}>
-                Sellers can also add products from their portal.
-              </p>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <a
+                  className="nx-btn"
+                  href={shopifyProductsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Shopify Admin
+                </a>
+                <Link className="nx-btn nx-btn--primary" to="/app/products/new">
+                  + Add a new product
+                </Link>
+              </div>
             </div>
           ) : (
             <table className="nx-table">
@@ -303,22 +355,24 @@ export default function AdminProductsPage() {
                 <tr>
                   <th>Product</th>
                   <th>Status</th>
-                  <th>Seller</th>
+                  <th>Inventory</th>
+                  <th>Vendor</th>
                   <th>Approval</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((product) => {
                   const vendorId = product.metafield?.value || "";
-                  const seller =
+                  const vendorLabel =
                     vendorId === ADMIN_STORE_VENDOR_ID
                       ? "Store (admin)"
-                      : vendorMap[vendorId]?.name || "Unknown";
+                      : vendorMap[vendorId]?.name ||
+                        product.vendor ||
+                        "—";
                   const status = statusBadge(product.status);
-                  const approval = approvalBadge(
-                    product.status,
-                    requireProductApproval,
-                  );
+                  const approval = vendorId
+                    ? approvalBadge(product.status, requireProductApproval)
+                    : { label: "—", tone: "neutral" };
                   const inventory = product.totalInventory ?? 0;
                   const variantCount =
                     (product as { variantsCount?: { count?: number } })
@@ -328,6 +382,8 @@ export default function AdminProductsPage() {
                   const open = expandedId === product.id;
                   const isDraft =
                     String(product.status || "").toUpperCase() === "DRAFT";
+                  const isMarketplace = Boolean(vendorId);
+                  const adminUrl = shopAdminProductUrl(shop, product.id);
 
                   return (
                     <tr key={product.id}>
@@ -337,37 +393,37 @@ export default function AdminProductsPage() {
                             <img
                               className="nx-thumb"
                               src={product.featuredImage.url}
-                              alt={product.featuredImage.altText || product.title}
+                              alt={
+                                product.featuredImage.altText || product.title
+                              }
                             />
                           ) : (
-                            <div className="nx-thumb nx-thumb--empty">No img</div>
+                            <div className="nx-thumb nx-thumb--empty">
+                              No img
+                            </div>
                           )}
                           <div>
-                            <button
-                              type="button"
-                              className="nx-primary"
-                              style={{
-                                background: "none",
-                                border: "none",
-                                padding: 0,
-                                cursor: "pointer",
-                                textAlign: "left",
-                              }}
-                              onClick={() =>
-                                setExpandedId(open ? null : product.id)
-                              }
+                            <a
+                              className="nx-product-link"
+                              href={adminUrl}
+                              target="_blank"
+                              rel="noreferrer"
                             >
                               {product.title}
-                            </button>
+                            </a>
                             <p className="nx-secondary">
-                              Current inventory is {inventory} across{" "}
+                              {inventory.toLocaleString()} in stock for{" "}
                               {variantCount} variant
                               {variantCount === 1 ? "" : "s"}
                             </p>
-                            {open && isDraft && (
+                            {open && isMarketplace && isDraft && (
                               <div className="nx-row-actions">
                                 <Form method="post">
-                                  <input type="hidden" name="intent" value="approve" />
+                                  <input
+                                    type="hidden"
+                                    name="intent"
+                                    value="approve"
+                                  />
                                   <input
                                     type="hidden"
                                     name="productId"
@@ -382,7 +438,11 @@ export default function AdminProductsPage() {
                                   </button>
                                 </Form>
                                 <Form method="post">
-                                  <input type="hidden" name="intent" value="reject" />
+                                  <input
+                                    type="hidden"
+                                    name="intent"
+                                    value="reject"
+                                  />
                                   <input
                                     type="hidden"
                                     name="productId"
@@ -398,6 +458,22 @@ export default function AdminProductsPage() {
                                 </Form>
                               </div>
                             )}
+                            {isMarketplace && isDraft && !open && (
+                              <button
+                                type="button"
+                                className="nx-secondary"
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  padding: 0,
+                                  cursor: "pointer",
+                                  marginTop: 4,
+                                }}
+                                onClick={() => setExpandedId(product.id)}
+                              >
+                                Show approval actions
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -406,7 +482,14 @@ export default function AdminProductsPage() {
                           {status.label}
                         </span>
                       </td>
-                      <td>{seller}</td>
+                      <td>
+                        {inventory.toLocaleString()}
+                        <span className="nx-secondary">
+                          {" "}
+                          / {variantCount} var
+                        </span>
+                      </td>
+                      <td>{vendorLabel}</td>
                       <td>
                         <span className={`nx-badge ${approval.tone}`}>
                           {approval.label}

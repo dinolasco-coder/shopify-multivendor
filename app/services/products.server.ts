@@ -935,6 +935,7 @@ export async function listMarketplaceProducts(
           handle
           featuredImage { url altText }
           totalInventory
+          vendor
           variantsCount {
             count
           }
