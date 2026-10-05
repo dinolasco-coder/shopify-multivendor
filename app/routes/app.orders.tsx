@@ -339,7 +339,9 @@ function orderSearchQueryForTab(tab: string) {
   if (tab === "cancelled") {
     return "status:cancelled";
   }
-  return null;
+  // Match Shopify Admin’s main Orders view: current open orders only
+  // (excludes old closed/archived orders).
+  return "status:open";
 }
 
 async function fetchOrdersCount(
@@ -420,7 +422,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ? shopifyAdminPath("orders?fulfillment_status=unfulfilled")
       : tab === "cancelled"
         ? shopifyAdminPath("orders?status=cancelled")
-        : shopifyAdminPath("orders");
+        : shopifyAdminPath("orders?status=open");
 
   return {
     orders,
@@ -531,7 +533,7 @@ export default function AdminOrdersPage() {
 
         <div className="nx-tabs">
           {[
-            { id: "all", label: "All" },
+            { id: "all", label: "Open" },
             { id: "unfulfilled", label: "Unfulfilled" },
             { id: "cancelled", label: "Cancelled" },
           ].map((t) => (

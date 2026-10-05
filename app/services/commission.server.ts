@@ -184,7 +184,7 @@ export async function syncRecentOrders(
   const response = await admin.graphql(
     `#graphql
     query marketplaceRecentOrders($first: Int!) {
-      orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+      orders(first: $first, query: "status:open", sortKey: CREATED_AT, reverse: true) {
         nodes {
           id
           name
