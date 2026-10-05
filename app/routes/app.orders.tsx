@@ -75,8 +75,8 @@ async function fetchShopifyOrders(admin: {
             name
             phone
           }
-          # fulfillments is a list, not a connection (no nodes)
-          fulfillments(first: 5) {
+          # fulfillments may be a bare list depending on API version
+          fulfillments {
             status
             trackingInfo { company number }
           }
@@ -350,13 +350,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       error instanceof Error ? error.message : "Failed to load Shopify orders.";
   }
 
-  const attributions = await listAttributionsForShop(session.shop);
+  const attributions = await listAttributionsForShop(session.shop).catch(
+    (error) => {
+      console.error("Failed to load order attributions", error);
+      return [] as Awaited<ReturnType<typeof listAttributionsForShop>>;
+    },
+  );
 
   const sellersByOrder: Record<
     string,
     Array<{ name: string; subtotal: number; commission: number; currency: string }>
   > = {};
   for (const row of attributions) {
+    if (!row.vendor?.name) continue;
     const list = sellersByOrder[row.shopifyOrderId] ?? [];
     list.push({
       name: row.vendor.name,
@@ -373,7 +379,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     syncError: syncError || listError,
     shopifyOrdersUrl: `${shopAdminBase(session.shop)}/orders`,
     shopifyUnfulfilledOrdersUrl: `${shopAdminBase(session.shop)}/orders?fulfillment_status=unfulfilled`,
-    shop,
+    shop: session.shop,
   };
 };
 
