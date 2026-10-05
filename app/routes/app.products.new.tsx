@@ -16,7 +16,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { createVendorProduct } from "../services/products.server";
 import { getOrCreateSettings } from "../models/settings.server";
-import { getVendorById, listVendors } from "../models/vendor.server";
+import { ADMIN_STORE_VENDOR_ID } from "../constants";
 import { AddProductWizard } from "../components/AddProductWizard";
 
 export const links: LinksFunction = () => [
@@ -25,18 +25,12 @@ export const links: LinksFunction = () => [
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const [vendors, settings] = await Promise.all([
-    listVendors(session.shop),
-    getOrCreateSettings(session.shop),
-  ]);
-
-  const sellers = vendors
-    .filter((v) => v.status === "approved")
-    .map((v) => ({ id: v.id, name: v.name }));
+  const settings = await getOrCreateSettings(session.shop);
+  const shopLabel = session.shop.replace(/\.myshopify\.com$/i, "");
 
   return {
-    sellers,
     requireProductApproval: settings.requireProductApproval,
+    shopLabel,
   };
 };
 
@@ -44,7 +38,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
 
-  const vendorId = String(form.get("vendorId") || "").trim();
   const mode = String(form.get("mode") || "easy");
   const title = String(form.get("title") || "").trim();
   const descriptionHtml = String(form.get("description") || "").trim();
@@ -54,18 +47,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .getAll("media")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
 
-  if (!vendorId) {
-    return { error: "Please choose a seller for this product." };
-  }
-
-  const vendor = await getVendorById(vendorId);
-  if (!vendor || vendor.shop !== session.shop) {
-    return { error: "Seller not found." };
-  }
-  if (vendor.status !== "approved") {
-    return { error: "Only approved sellers can receive products." };
-  }
-
   if (mode !== "manual" && !images.length) {
     return { error: "Please add a photo of your product first." };
   }
@@ -74,10 +55,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { error: "Please enter a name and a price." };
   }
 
+  const shopLabel = session.shop.replace(/\.myshopify\.com$/i, "");
+
   try {
     await createVendorProduct(admin, {
-      vendorId: vendor.id,
-      vendorName: vendor.name,
+      vendorId: ADMIN_STORE_VENDOR_ID,
+      vendorName: shopLabel,
       title,
       descriptionHtml,
       price,
@@ -100,35 +83,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminAddProductPage() {
-  const { sellers, requireProductApproval } = useLoaderData<typeof loader>();
+  const { requireProductApproval } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
   return (
     <s-page heading="Add product">
       <AppProvider i18n={{}}>
-        {sellers.length === 0 ? (
-          <div style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
-            <p style={{ fontSize: 15, color: "#6d7175" }}>
-              No approved sellers yet. Invite and approve a seller first, then
-              you can add products for them here.
-            </p>
-            <p style={{ marginTop: 12 }}>
-              <a href="/app/vendors">Go to Sellers</a>
-            </p>
-          </div>
-        ) : (
-          <AddProductWizard
-            requireProductApproval={requireProductApproval}
-            error={
-              actionData && "error" in actionData ? actionData.error : null
-            }
-            busy={navigation.state !== "idle"}
-            backUrl="/app/products"
-            backLabel="Back to products"
-            sellers={sellers}
-          />
-        )}
+        <AddProductWizard
+          requireProductApproval={requireProductApproval}
+          error={actionData && "error" in actionData ? actionData.error : null}
+          busy={navigation.state !== "idle"}
+          backUrl="/app/products"
+          backLabel="Back to products"
+        />
       </AppProvider>
     </s-page>
   );

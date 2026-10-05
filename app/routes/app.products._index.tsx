@@ -21,6 +21,7 @@ import {
 } from "../services/products.server";
 import { listVendors } from "../models/vendor.server";
 import { getOrCreateSettings } from "../models/settings.server";
+import { ADMIN_STORE_VENDOR_ID } from "../constants";
 
 function shopAdminProductsUrl(shop: string) {
   const handle = shop.replace(/\.myshopify\.com$/i, "");
@@ -309,7 +310,10 @@ export default function AdminProductsPage() {
               <tbody>
                 {filtered.map((product) => {
                   const vendorId = product.metafield?.value || "";
-                  const seller = vendorMap[vendorId]?.name || "Unknown";
+                  const seller =
+                    vendorId === ADMIN_STORE_VENDOR_ID
+                      ? "Store (admin)"
+                      : vendorMap[vendorId]?.name || "Unknown";
                   const status = statusBadge(product.status);
                   const approval = approvalBadge(
                     product.status,
