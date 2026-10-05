@@ -48,16 +48,19 @@ type ShopifyOrderRow = {
   delivery: string;
 };
 
-async function fetchShopifyOrders(admin: {
-  graphql: (
-    query: string,
-    options?: { variables?: Record<string, unknown> },
-  ) => Promise<Response>;
-}): Promise<ShopifyOrderRow[]> {
+async function fetchShopifyOrders(
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: Record<string, unknown> },
+    ) => Promise<Response>;
+  },
+  options?: { query?: string; first?: number },
+): Promise<ShopifyOrderRow[]> {
   const response = await admin.graphql(
     `#graphql
-    query marketplaceOrdersList($first: Int!) {
-      orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+    query marketplaceOrdersList($first: Int!, $query: String) {
+      orders(first: $first, query: $query, sortKey: CREATED_AT, reverse: true) {
         nodes {
           id
           name
@@ -93,7 +96,12 @@ async function fetchShopifyOrders(admin: {
         }
       }
     }`,
-    { variables: { first: 50 } },
+    {
+      variables: {
+        first: options?.first ?? 100,
+        query: options?.query || null,
+      },
+    },
   );
   const json = await response.json();
   if (json.errors?.length) {
@@ -326,8 +334,45 @@ const styles = `
   }
 `;
 
+function orderSearchQueryForTab(tab: string) {
+  if (tab === "unfulfilled") {
+    // Same as Shopify Admin → Orders → Unfulfilled.
+    return "status:open fulfillment_status:unfulfilled";
+  }
+  if (tab === "cancelled") {
+    return "status:cancelled";
+  }
+  return null;
+}
+
+async function fetchOrdersCount(
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: Record<string, unknown> },
+    ) => Promise<Response>;
+  },
+  query: string | null,
+) {
+  const response = await admin.graphql(
+    `#graphql
+    query marketplaceOrdersCount($query: String) {
+      ordersCount(query: $query) {
+        count
+      }
+    }`,
+    { variables: { query } },
+  );
+  const json = await response.json();
+  return Number(json.data?.ordersCount?.count ?? 0);
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const tab = (url.searchParams.get("tab") || "all").toLowerCase();
+  const searchQuery = orderSearchQueryForTab(tab);
+  const adminBase = shopAdminBase(session.shop);
 
   let syncError: string | null = null;
   try {
@@ -340,15 +385,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   let orders: ShopifyOrderRow[] = [];
   let listError: string | null = null;
+  let totalMatching = 0;
   try {
-    orders = await fetchShopifyOrders(admin);
+    const [list, count] = await Promise.all([
+      fetchShopifyOrders(admin, { query: searchQuery || undefined, first: 100 }),
+      fetchOrdersCount(admin, searchQuery),
+    ]);
+    orders = list;
+    totalMatching = count;
   } catch (error) {
     console.error("Failed to load Shopify orders", error);
     listError =
       error instanceof Error ? error.message : "Failed to load Shopify orders.";
   }
 
-  const attributions = await listAttributionsForShop(session.shop);
+  const attributions = await listAttributionsForShop(session.shop).catch(
+    () => [] as Awaited<ReturnType<typeof listAttributionsForShop>>,
+  );
 
   const sellersByOrder: Record<
     string,
@@ -366,12 +419,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sellersByOrder[row.shopifyOrderId] = list;
   }
 
+  const shopifyOrdersUrl =
+    tab === "unfulfilled"
+      ? `${adminBase}/orders?fulfillment_status=unfulfilled`
+      : tab === "cancelled"
+        ? `${adminBase}/orders?status=cancelled`
+        : `${adminBase}/orders`;
+
   return {
     orders,
     sellersByOrder,
     syncError: syncError || listError,
-    shopifyOrdersUrl: `${shopAdminBase(session.shop)}/orders`,
+    shopifyOrdersUrl,
     shop: session.shop,
+    totalMatching,
+    listCap: 100,
   };
 };
 
@@ -400,8 +462,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminOrdersPage() {
-  const { orders, sellersByOrder, syncError, shopifyOrdersUrl, shop } =
-    useLoaderData<typeof loader>();
+  const {
+    orders,
+    sellersByOrder,
+    syncError,
+    shopifyOrdersUrl,
+    shop,
+    totalMatching,
+    listCap,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -412,19 +481,12 @@ export default function AdminOrdersPage() {
 
   const tab = (searchParams.get("tab") || "all").toLowerCase();
 
+  // Server already filters by tab (Admin-matching query). Client only searches.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const qBare = q.replace(/^#/, "");
+    if (!q) return orders;
     return orders.filter((order) => {
-      if (tab === "unfulfilled") {
-        if (order.cancelledAt) return false;
-        if (order.displayFulfillmentStatus.toUpperCase() !== "UNFULFILLED")
-          return false;
-      }
-      if (tab === "cancelled") {
-        if (!order.cancelledAt) return false;
-      }
-      if (!q) return true;
       const sellers = (sellersByOrder[order.id] || [])
         .map((s) => s.name)
         .join(" ")
@@ -432,13 +494,15 @@ export default function AdminOrdersPage() {
       const hay = `${order.searchText || ""} ${sellers}`;
       return hay.includes(q) || (qBare.length > 0 && hay.includes(qBare));
     });
-  }, [orders, query, sellersByOrder, tab]);
+  }, [orders, query, sellersByOrder]);
 
   function setTab(next: string) {
     const params = new URLSearchParams(searchParams);
     params.set("tab", next);
     setSearchParams(params, { replace: true });
   }
+
+  const truncated = !query && totalMatching > orders.length;
 
   return (
     <s-page heading="Orders">
@@ -465,6 +529,12 @@ export default function AdminOrdersPage() {
         {actionData && "message" in actionData && actionData.message && (
           <div className="nx-banner ok">{actionData.message}</div>
         )}
+        {!syncError && truncated && (
+          <div className="nx-banner ok">
+            Showing {orders.length} of {totalMatching} matching orders (latest{" "}
+            {listCap}). Open Shopify Admin for the full list.
+          </div>
+        )}
 
         <div className="nx-tabs">
           {[
@@ -479,6 +549,7 @@ export default function AdminOrdersPage() {
               onClick={() => setTab(t.id)}
             >
               {t.label}
+              {tab === t.id && totalMatching > 0 ? ` (${totalMatching})` : ""}
             </button>
           ))}
         </div>

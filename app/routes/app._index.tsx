@@ -31,8 +31,7 @@ async function fetchShopDashboard(admin: {
     options?: { variables?: Record<string, unknown> },
   ) => Promise<Response>;
 }) {
-  // Match Shopify Admin → Orders → Unfulfilled (open orders only).
-  // `unshipped` is the Admin API search term for unfulfilled.
+  // Match Shopify Admin → Orders → Unfulfilled (open; includes partial).
   const response = await admin.graphql(
     `#graphql
     query marketplaceAdminHome {
@@ -42,7 +41,7 @@ async function fetchShopDashboard(admin: {
         myshopifyDomain
         primaryDomain { url }
       }
-      ordersCount(query: "status:open fulfillment_status:unshipped") {
+      ordersCount(query: "status:open fulfillment_status:unfulfilled") {
         count
       }
       activeProductsCount: productsCount(query: "status:active") {
