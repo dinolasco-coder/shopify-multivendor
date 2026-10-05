@@ -17,6 +17,14 @@ function appBaseUrl(request: Request) {
   );
 }
 
+function shopAdminBase(shop: string) {
+  const handle = shop
+    .replace(/^https?:\/\//, "")
+    .replace(/\.myshopify\.com$/i, "")
+    .split("/")[0];
+  return `https://admin.shopify.com/store/${handle}`;
+}
+
 async function fetchShopDashboard(admin: {
   graphql: (
     query: string,
@@ -31,8 +39,15 @@ async function fetchShopDashboard(admin: {
         email
         myshopifyDomain
         primaryDomain { url }
+        currencyCode
       }
       ordersCount(query: "fulfillment_status:unshipped") {
+        count
+      }
+      productsCount {
+        count
+      }
+      activeProductsCount: productsCount(query: "status:active") {
         count
       }
     }`,
@@ -45,13 +60,19 @@ async function fetchShopDashboard(admin: {
       (json.data?.shop?.myshopifyDomain as string) ||
       (json.data?.shop?.primaryDomain?.url as string) ||
       "",
+    currencyCode: (json.data?.shop?.currencyCode as string) || "PHP",
     unfulfilledOrders: Number(json.data?.ordersCount?.count ?? 0),
+    shopifyProductsTotal: Number(json.data?.productsCount?.count ?? 0),
+    shopifyActiveProducts: Number(
+      json.data?.activeProductsCount?.count ?? 0,
+    ),
   };
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
+  const adminBase = shopAdminBase(shop);
 
   const [statusCounts, sales, shopInfo, products, balances, settings] =
     await Promise.all([
@@ -61,7 +82,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         shopName: shop.replace(/\.myshopify\.com$/i, ""),
         shopEmail: "",
         shopDomain: shop,
+        currencyCode: "PHP",
         unfulfilledOrders: 0,
+        shopifyProductsTotal: 0,
+        shopifyActiveProducts: 0,
       })),
       listMarketplaceProducts(admin, { first: 100 }).catch(() => []),
       listVendorPayoutBalances(shop).catch(() => []),
@@ -70,7 +94,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const approved = statusCounts.approved ?? 0;
   const pendingSellers = statusCounts.pending ?? 0;
-  const activeProducts = Array.isArray(products)
+  const activeMarketplaceProducts = Array.isArray(products)
     ? products.filter(
         (p: { status?: string }) =>
           String(p.status || "").toUpperCase() === "ACTIVE",
@@ -96,15 +120,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shopUrl: `https://${(shopInfo.shopDomain || shop).replace(/^https?:\/\//, "")}`,
     revenue: sales.revenue,
     commission: sales.commission,
-    currency: sales.currency,
+    currency: sales.currency || shopInfo.currencyCode,
     unfulfilledOrders: shopInfo.unfulfilledOrders,
     activeSellers: approved,
-    activeProducts,
+    activeProducts: shopInfo.shopifyActiveProducts || activeMarketplaceProducts,
+    marketplaceProducts: activeMarketplaceProducts,
+    shopifyProductsTotal: shopInfo.shopifyProductsTotal,
     pendingSellers,
     pendingProducts,
     payoutOwed,
     defaultCommissionPercent: settings.defaultCommissionPercent,
     vendorPortalUrl: `${appBaseUrl(request)}/vendor/login`,
+    shopifyAdmin: {
+      home: adminBase,
+      products: `${adminBase}/products`,
+      productsNew: `${adminBase}/products/new`,
+      orders: `${adminBase}/orders`,
+      ordersUnfulfilled: `${adminBase}/orders?fulfillment_status=unshipped`,
+      settings: `${adminBase}/settings/general`,
+    },
   };
 };
 
@@ -150,6 +184,16 @@ const styles = `
     padding: 9px 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
   }
   .nx-btn--ghost { background: #fff; color: #202223; }
+  .nx-metric__hint { margin: 6px 0 0; font-size: 11px; color: #8c9196; }
+  .nx-admin-links {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px;
+  }
+  .nx-admin-links a {
+    font-size: 12px; font-weight: 600; color: #202223; text-decoration: none;
+    border: 1px solid #c9cccf; background: #fff; border-radius: 999px;
+    padding: 6px 12px;
+  }
+  .nx-admin-links a:hover { background: #f6f6f7; }
   .nx-banner {
     margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; font-size: 14px;
     display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap;
@@ -190,12 +234,28 @@ function CopyPortalButton({ url }: { url: string }) {
 export default function Dashboard() {
   const data = useLoaderData<typeof loader>();
   const welcomeName = data.shopName || "there";
+  const admin = data.shopifyAdmin;
 
   return (
     <s-page heading="Home">
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="nx-home">
         <h1 className="nx-welcome">Welcome {welcomeName}!</h1>
+
+        <div className="nx-admin-links">
+          <a href={admin.home} target="_blank" rel="noreferrer">
+            Shopify Admin
+          </a>
+          <a href={admin.products} target="_blank" rel="noreferrer">
+            Products in Shopify
+          </a>
+          <a href={admin.orders} target="_blank" rel="noreferrer">
+            Orders in Shopify
+          </a>
+          <a href={admin.productsNew} target="_blank" rel="noreferrer">
+            + Add product in Shopify
+          </a>
+        </div>
 
         {data.pendingSellers > 0 && (
           <div className="nx-banner warn">
@@ -218,30 +278,51 @@ export default function Dashboard() {
 
         <div className="nx-metrics">
           <Link className="nx-metric" to="/app/orders">
-            <p className="nx-metric__label">Total revenue</p>
+            <p className="nx-metric__label">Marketplace revenue</p>
             <p className="nx-metric__value">
               {formatMoney(data.revenue, data.currency)}
             </p>
+            <p className="nx-metric__hint">From attributed seller sales</p>
           </Link>
-          <Link className="nx-metric" to="/app/orders?tab=unfulfilled">
+          <a
+            className="nx-metric"
+            href={admin.ordersUnfulfilled}
+            target="_blank"
+            rel="noreferrer"
+          >
             <p className="nx-metric__label">Unfulfilled orders</p>
             <p className="nx-metric__value">{data.unfulfilledOrders}</p>
-          </Link>
+            <p className="nx-metric__hint">Opens Shopify Admin → Orders</p>
+          </a>
           <Link className="nx-metric" to="/app/vendors">
             <p className="nx-metric__label">Active sellers</p>
             <p className="nx-metric__value">{data.activeSellers}</p>
+            <p className="nx-metric__hint">Approved marketplace sellers</p>
           </Link>
-          <Link className="nx-metric" to="/app/products">
+          <a
+            className="nx-metric"
+            href={admin.products}
+            target="_blank"
+            rel="noreferrer"
+          >
             <p className="nx-metric__label">Active products</p>
             <p className="nx-metric__value">{data.activeProducts}</p>
-          </Link>
+            <p className="nx-metric__hint">
+              Shopify Admin ({data.shopifyProductsTotal} total
+              {data.marketplaceProducts
+                ? ` · ${data.marketplaceProducts} marketplace`
+                : ""}
+              )
+            </p>
+          </a>
         </div>
 
         <div className="nx-grid">
           <div className="nx-panel">
             <h2 className="nx-panel__title">Quick actions</h2>
             <p className="nx-panel__sub">
-              Jump to the tasks you use most when running the marketplace.
+              Jump to marketplace tasks, or open the matching Shopify Admin
+              page.
             </p>
             <div className="nx-actions">
               <Link className="nx-action" to="/app/vendors">
@@ -250,18 +331,37 @@ export default function Dashboard() {
                   Add sellers, approve applications, set commission.
                 </p>
               </Link>
-              <Link className="nx-action" to="/app/products">
-                <p className="nx-action__title">Review products</p>
+              <div className="nx-action" style={{ cursor: "default" }}>
+                <p className="nx-action__title">Add a product</p>
                 <p className="nx-action__desc">
-                  Approve drafts or check what sellers listed.
+                  Use the seller-style form in this app, or Shopify Admin.
                 </p>
-              </Link>
-              <Link className="nx-action" to="/app/orders">
-                <p className="nx-action__title">View orders</p>
+                <div className="nx-portal" style={{ marginTop: 10 }}>
+                  <Link className="nx-btn" to="/app/products/new">
+                    Add in app
+                  </Link>
+                  <a
+                    className="nx-btn nx-btn--ghost"
+                    href={admin.productsNew}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Shopify Admin
+                  </a>
+                </div>
+              </div>
+              <a
+                className="nx-action"
+                href={admin.orders}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <p className="nx-action__title">View orders in Shopify</p>
                 <p className="nx-action__desc">
-                  See fulfillment, payment, and seller splits.
+                  Open Shopify Admin orders (fulfillment & payment source of
+                  truth).
                 </p>
-              </Link>
+              </a>
               <Link className="nx-action" to="/app/payouts">
                 <p className="nx-action__title">Record payouts</p>
                 <p className="nx-action__desc">
@@ -274,7 +374,8 @@ export default function Dashboard() {
           <div className="nx-panel">
             <h2 className="nx-panel__title">Money snapshot</h2>
             <p className="nx-panel__sub">
-              Default commission is {data.defaultCommissionPercent}%.
+              Default commission is {data.defaultCommissionPercent}%. Revenue
+              here is marketplace attribution, not Shopify Analytics.
             </p>
             <div className="nx-money-row">
               <span>Marketplace revenue</span>
@@ -292,9 +393,14 @@ export default function Dashboard() {
               <Link className="nx-btn nx-btn--ghost" to="/app/payouts">
                 Open payouts
               </Link>
-              <Link className="nx-btn nx-btn--ghost" to="/app/settings">
-                Settings
-              </Link>
+              <a
+                className="nx-btn nx-btn--ghost"
+                href={admin.settings}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Shopify settings
+              </a>
             </div>
           </div>
         </div>
