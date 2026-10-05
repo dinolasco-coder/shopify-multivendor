@@ -17,12 +17,22 @@ function appBaseUrl(request: Request) {
   );
 }
 
+function shopAdminBase(shop: string) {
+  const handle = shop
+    .replace(/^https?:\/\//, "")
+    .replace(/\.myshopify\.com$/i, "")
+    .split("/")[0];
+  return `https://admin.shopify.com/store/${handle}`;
+}
+
 async function fetchShopDashboard(admin: {
   graphql: (
     query: string,
     options?: { variables?: Record<string, unknown> },
   ) => Promise<Response>;
 }) {
+  // Match Shopify Admin → Orders → Unfulfilled (open orders only).
+  // `unshipped` is the Admin API search term for unfulfilled.
   const response = await admin.graphql(
     `#graphql
     query marketplaceAdminHome {
@@ -32,7 +42,10 @@ async function fetchShopDashboard(admin: {
         myshopifyDomain
         primaryDomain { url }
       }
-      ordersCount(query: "fulfillment_status:unshipped") {
+      ordersCount(query: "status:open fulfillment_status:unshipped") {
+        count
+      }
+      activeProductsCount: productsCount(query: "status:active") {
         count
       }
     }`,
@@ -46,12 +59,14 @@ async function fetchShopDashboard(admin: {
       (json.data?.shop?.primaryDomain?.url as string) ||
       "",
     unfulfilledOrders: Number(json.data?.ordersCount?.count ?? 0),
+    activeProducts: Number(json.data?.activeProductsCount?.count ?? 0),
   };
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
+  const adminBase = shopAdminBase(shop);
 
   const [statusCounts, sales, shopInfo, products, balances, settings] =
     await Promise.all([
@@ -62,6 +77,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         shopEmail: "",
         shopDomain: shop,
         unfulfilledOrders: 0,
+        activeProducts: 0,
       })),
       listMarketplaceProducts(admin, { first: 100 }).catch(() => []),
       listVendorPayoutBalances(shop).catch(() => []),
@@ -70,12 +86,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const approved = statusCounts.approved ?? 0;
   const pendingSellers = statusCounts.pending ?? 0;
-  const activeProducts = Array.isArray(products)
-    ? products.filter(
-        (p: { status?: string }) =>
-          String(p.status || "").toUpperCase() === "ACTIVE",
-      ).length
-    : 0;
   const pendingProducts = Array.isArray(products)
     ? products.filter(
         (p: { status?: string; metafield?: { value?: string } | null }) =>
@@ -99,12 +109,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     currency: sales.currency,
     unfulfilledOrders: shopInfo.unfulfilledOrders,
     activeSellers: approved,
-    activeProducts,
+    activeProducts: shopInfo.activeProducts,
     pendingSellers,
     pendingProducts,
     payoutOwed,
     defaultCommissionPercent: settings.defaultCommissionPercent,
     vendorPortalUrl: `${appBaseUrl(request)}/vendor/login`,
+    shopifyUnfulfilledOrdersUrl: `${adminBase}/orders?fulfillment_status=unfulfilled`,
+    shopifyActiveProductsUrl: `${adminBase}/products?selectedView=all&status=ACTIVE`,
   };
 };
 
@@ -223,18 +235,28 @@ export default function Dashboard() {
               {formatMoney(data.revenue, data.currency)}
             </p>
           </Link>
-          <Link className="nx-metric" to="/app/orders?tab=unfulfilled">
+          <a
+            className="nx-metric"
+            href={data.shopifyUnfulfilledOrdersUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
             <p className="nx-metric__label">Unfulfilled orders</p>
             <p className="nx-metric__value">{data.unfulfilledOrders}</p>
-          </Link>
+          </a>
           <Link className="nx-metric" to="/app/vendors">
             <p className="nx-metric__label">Active sellers</p>
             <p className="nx-metric__value">{data.activeSellers}</p>
           </Link>
-          <Link className="nx-metric" to="/app/products">
+          <a
+            className="nx-metric"
+            href={data.shopifyActiveProductsUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
             <p className="nx-metric__label">Active products</p>
             <p className="nx-metric__value">{data.activeProducts}</p>
-          </Link>
+          </a>
         </div>
 
         <div className="nx-grid">
