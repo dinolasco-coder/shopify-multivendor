@@ -32,6 +32,7 @@ export type ShopAnalytics = {
   source: "shopifyql" | "fallback";
   error: string | null;
   totalSales: number;
+  netSales: number;
   previousTotalSales: number;
   salesChangePercent: number | null;
   orders: number;
@@ -48,13 +49,35 @@ export type ShopAnalytics = {
 };
 
 function money(value: unknown): number {
-  const n = Number(value ?? 0);
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "object") {
+    const obj = value as { amount?: unknown };
+    if (obj.amount != null) return money(obj.amount);
+  }
+  // Shopify sometimes returns "1234.56", occasionally with currency junk.
+  const cleaned = String(value).replace(/[^0-9.\-]/g, "");
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
 }
 
 function pctChange(current: number, previous: number): number | null {
   if (!previous) return null;
   return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+/** Prefer period __totals from any row; otherwise sum the timeseries column. */
+function pickPeriodMetric(
+  rows: Array<Record<string, unknown>>,
+  totalsKey: string,
+  seriesKey: string,
+): number {
+  for (const row of rows) {
+    if (row[totalsKey] != null && row[totalsKey] !== "") {
+      return money(row[totalsKey]);
+    }
+  }
+  return rows.reduce((sum, row) => sum + money(row[seriesKey]), 0);
 }
 
 function formatSeriesLabel(raw: unknown, grain: "hour" | "day" | "month") {
@@ -162,7 +185,7 @@ async function buildShopifyqlAnalytics(
 
   const salesQuery = [
     "FROM sales",
-    "SHOW total_sales, orders, average_order_value",
+    "SHOW total_sales, net_sales, orders, average_order_value",
     `TIMESERIES ${timeseries}`,
     since,
     "COMPARE TO previous_period",
@@ -194,28 +217,44 @@ async function buildShopifyqlAnalytics(
     })),
   ]);
 
-  const first = sales.rows[0] || {};
-  const totalSales = money(first.total_sales__totals ?? first.total_sales);
-  const previousTotalSales = money(
-    first.comparison_total_sales__previous_period__totals ??
-      first.comparison_total_sales__previous_period,
+  const rows = sales.rows;
+  const totalSales = pickPeriodMetric(
+    rows,
+    "total_sales__totals",
+    "total_sales",
   );
-  const orders = money(first.orders__totals ?? first.orders);
-  const previousOrders = money(
-    first.comparison_orders__previous_period__totals ??
-      first.comparison_orders__previous_period,
+  const netSales = pickPeriodMetric(rows, "net_sales__totals", "net_sales");
+  const previousTotalSales = pickPeriodMetric(
+    rows,
+    "comparison_total_sales__previous_period__totals",
+    "comparison_total_sales__previous_period",
   );
-  const averageOrderValue = money(
-    first.average_order_value__totals ?? first.average_order_value,
+  const orders = pickPeriodMetric(rows, "orders__totals", "orders");
+  const previousOrders = pickPeriodMetric(
+    rows,
+    "comparison_orders__previous_period__totals",
+    "comparison_orders__previous_period",
+  );
+  const averageOrderValue = pickPeriodMetric(
+    rows,
+    "average_order_value__totals",
+    "average_order_value",
   );
 
-  const series: AnalyticsPoint[] = sales.rows
+  const series: AnalyticsPoint[] = rows
     .filter((row) => row[timeseries] != null)
     .map((row) => ({
       label: formatSeriesLabel(row[timeseries], timeseries),
       sales: money(row.total_sales),
       orders: money(row.orders),
     }));
+
+  // Sanity: if period total is missing/odd but we have a chart, use series sum.
+  const seriesSum = series.reduce((s, p) => s + p.sales, 0);
+  const resolvedTotalSales =
+    rows.some((r) => r.total_sales__totals != null && r.total_sales__totals !== "")
+      ? totalSales
+      : seriesSum;
 
   const topProducts: TopProductRow[] = top.rows
     .filter((row) => row.product_title)
@@ -224,12 +263,15 @@ async function buildShopifyqlAnalytics(
       netSales: money(row.net_sales),
     }));
 
-  const custRow = customers.rows[0] || {};
-  const customersCount = money(
-    custRow.customers__totals ?? custRow.customers,
+  const customersCount = pickPeriodMetric(
+    customers.rows,
+    "customers__totals",
+    "customers",
   );
-  const returning = money(
-    custRow.returning_customers__totals ?? custRow.returning_customers,
+  const returning = pickPeriodMetric(
+    customers.rows,
+    "returning_customers__totals",
+    "returning_customers",
   );
   const returningCustomerRate =
     customersCount > 0 ? (returning / customersCount) * 100 : null;
@@ -240,9 +282,10 @@ async function buildShopifyqlAnalytics(
     currency: sales.currency,
     source: "shopifyql",
     error: null,
-    totalSales,
+    totalSales: resolvedTotalSales,
+    netSales,
     previousTotalSales,
-    salesChangePercent: pctChange(totalSales, previousTotalSales),
+    salesChangePercent: pctChange(resolvedTotalSales, previousTotalSales),
     orders,
     previousOrders,
     averageOrderValue,
@@ -316,6 +359,7 @@ async function buildFallbackAnalytics(
     source: "fallback",
     error: reason,
     totalSales,
+    netSales: totalSales,
     previousTotalSales: 0,
     salesChangePercent: null,
     orders,

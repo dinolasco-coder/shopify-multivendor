@@ -227,6 +227,9 @@ export default function AdminAnalyticsPage() {
             ) : (
               <p className="nx-metric__hint">Compared to previous period</p>
             )}
+            <p className="nx-metric__hint">
+              Net sales {formatMoney(analytics.netSales, analytics.currency)}
+            </p>
           </div>
           <div className="nx-metric">
             <p className="nx-metric__label">Orders</p>
