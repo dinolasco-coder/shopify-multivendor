@@ -50,8 +50,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Use optional install first; if Shopify rejects undeclared optional scopes,
   // merchant can use the authorize link from Settings.
-  const mode = (url.searchParams.get("mode") || "optional").toLowerCase();
+  // Default to full OAuth authorize. Optional-scopes install only works after
+  // `shopify app deploy` publishes optional_scopes to Partners (otherwise:
+  // Oauth error undeclared_optional_scopes).
+  const mode = (url.searchParams.get("mode") || "full").toLowerCase();
   throw redirect(
-    mode === "full" ? authorize.toString() : optionalInstall.toString(),
+    mode === "optional" ? optionalInstall.toString() : authorize.toString(),
   );
 };

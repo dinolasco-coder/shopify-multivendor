@@ -50,13 +50,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionScopes.includes(s),
   );
 
-  const storeHandle = session.shop.replace(/\.myshopify\.com$/i, "");
-  // Escape iframe → /reauth → Shopify grant screen
+  // Escape iframe → /reauth → classic OAuth authorize (required scopes)
   const reauthUrl = `${base}/reauth?shop=${encodeURIComponent(session.shop)}`;
   const reauthFullUrl = `${reauthUrl}&mode=full`;
-  const adminOptionalUrl = `https://admin.shopify.com/store/${storeHandle}/oauth/install?client_id=${encodeURIComponent(
-    process.env.SHOPIFY_API_KEY || "",
-  )}&optional_scopes=${encodeURIComponent("read_shipping,write_shipping")}`;
 
   return {
     settings,
@@ -71,33 +67,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionHasShippingScopes: sessionHasShipping,
     reauthUrl,
     reauthFullUrl,
-    adminOptionalUrl,
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, scopes } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const form = await request.formData();
-  const intent = String(form.get("intent") || "save");
-
-  if (intent === "request-shipping-scopes") {
-    try {
-      // Shopify shows a grant modal / redirect for optional scopes.
-      await scopes.request(["read_shipping", "write_shipping"]);
-      return {
-        ok: true,
-        message:
-          "Shipping permissions requested. If you approved them, refresh this page.",
-      };
-    } catch (error) {
-      return {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not open Shopify permission screen. Use the Re-authorize link below (opens outside the app).",
-      };
-    }
-  }
 
   const defaultCommissionPercent = Number(form.get("defaultCommissionPercent"));
   const requireProductApproval = form.get("requireProductApproval") === "on";
@@ -163,7 +138,6 @@ export default function SettingsPage() {
     sessionHasShippingScopes,
     reauthUrl,
     reauthFullUrl,
-    adminOptionalUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -368,48 +342,31 @@ export default function SettingsPage() {
             {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
           </p>
           <p style={{ fontSize: 13, color: "#6d7175" }}>
-            Prefer the button first. If it does nothing, open a link in a{" "}
-            <strong>new tab</strong> (not inside the app frame).
+            Click the button below — it opens Shopify in a <strong>new tab</strong>.
+            Approve access, then come back here and refresh.
           </p>
-          <Form method="post" style={{ marginTop: 8 }}>
-            <input
-              type="hidden"
-              name="intent"
-              value="request-shipping-scopes"
-            />
-            <button className="nx-btn" type="submit" disabled={busy}>
-              {busy &&
-              navigation.formData?.get("intent") === "request-shipping-scopes"
-                ? "Opening…"
-                : "Request shipping permissions"}
-            </button>
-          </Form>
-          <p style={{ marginTop: 12, fontSize: 13 }}>
+          <a
+            className="nx-btn"
+            href={reauthFullUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-flex",
+              textDecoration: "none",
+              marginTop: 8,
+            }}
+          >
+            Re-authorize Shopify permissions
+          </a>
+          <p style={{ marginTop: 12, fontSize: 12, color: "#6d7175" }}>
+            Backup link:{" "}
             <a
               className="nx-link"
               href={reauthUrl}
               target="_blank"
               rel="noreferrer"
             >
-              Open permission page (new tab)
-            </a>
-            {" · "}
-            <a
-              className="nx-link"
-              href={adminOptionalUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Shopify Admin grant link
-            </a>
-            {" · "}
-            <a
-              className="nx-link"
-              href={reauthFullUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Full re-install authorize
+              {reauthFullUrl}
             </a>
           </p>
         </div>
