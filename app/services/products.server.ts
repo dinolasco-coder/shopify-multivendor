@@ -95,6 +95,8 @@ export async function createVendorProduct(
             {
               id: variant.id,
               price: input.price,
+              // Avoid checkout "Out of stock" when location routing mismatches.
+              inventoryPolicy: "CONTINUE",
               inventoryItem: { tracked: true, requiresShipping: true },
             },
           ],
@@ -700,12 +702,12 @@ async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
   const primary =
     (preferredId && pool.find((l) => l.id === preferredId)) ||
     (preferredName && pool.find((l) => nameIncludes(l, preferredName))) ||
-    pool.find((l) => nameIncludes(l, "shop")) ||
     (defaultLocation?.id &&
       pool.find((l) => l.id === defaultLocation.id)) ||
     (defaultLocation?.isActive !== false &&
       defaultLocation?.fulfillsOnlineOrders &&
       defaultLocation) ||
+    pool.find((l) => nameIncludes(l, "shop")) ||
     pool[0] ||
     active[0];
 
@@ -1186,9 +1188,43 @@ async function readMaxAvailableQuantity(
   return Math.max(0, Math.floor(max));
 }
 
+async function setVariantContinueSelling(
+  admin: AdminGraphql,
+  productId: string,
+  variantId: string,
+) {
+  const response = await admin.graphql(
+    `#graphql
+    mutation marketplaceVariantContinueSelling(
+      $productId: ID!
+      $variants: [ProductVariantsBulkInput!]!
+    ) {
+      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        productId,
+        variants: [{ id: variantId, inventoryPolicy: "CONTINUE" }],
+      },
+    },
+  );
+  const json = await response.json();
+  const errors = json.data?.productVariantsBulkUpdate?.userErrors ?? [];
+  if (json.errors?.length || errors.length) {
+    throw new Error(
+      [
+        ...(json.errors ?? []).map((e: { message: string }) => e.message),
+        ...errors.map((e: { message: string }) => e.message),
+      ].join(", "),
+    );
+  }
+}
+
 /**
  * Repair a marketplace product for Ship checkout:
- * stock on shipping-profile locations + requires shipping + shipping profile.
+ * stock on one ship-from location + continue selling + shipping profile.
  */
 export async function fixProductForShippingCheckout(
   admin: AdminGraphql,
@@ -1223,6 +1259,9 @@ export async function fixProductForShippingCheckout(
     );
   }
 
+  // Lets checkout proceed even if location routing is picky.
+  await setVariantContinueSelling(admin, productId, variant.id);
+
   const profileResult = await associateVariantWithDefaultShippingProfile(
     admin,
     variant.id,
@@ -1235,7 +1274,7 @@ export async function fixProductForShippingCheckout(
 
   if (!profileResult.ok) {
     throw new Error(
-      `Stock consolidated for “${product.title}”, but shipping profile failed: ${profileResult.error}`,
+      `Stock updated for “${product.title}” (continue selling on), but shipping profile failed: ${profileResult.error}`,
     );
   }
 
