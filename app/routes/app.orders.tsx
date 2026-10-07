@@ -15,6 +15,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { listAttributionsForShop } from "../models/attribution.server";
 import { syncRecentOrders } from "../services/commission.server";
+import {
+  cancelShopifyOrder,
+  ORDER_CANCEL_REASONS,
+  type OrderCancelReason,
+} from "../services/orders.server";
 import { formatMoney } from "../utils/money";
 
 function shopifyAdminPath(path: string) {
@@ -354,9 +359,27 @@ const styles = `
   .nx-banner { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
   .nx-banner.err { background: #fbeae9; color: #8e1f0b; }
   .nx-banner.ok { background: #e4f7e9; color: #0d6b2d; }
+  .nx-cancel {
+    display: flex; flex-direction: column; gap: 6px; min-width: 200px; max-width: 240px;
+  }
+  .nx-cancel select, .nx-cancel input[type="text"] {
+    width: 100%; border: 1px solid #c9cccf; border-radius: 8px; padding: 7px 10px;
+    font-size: 12px; background: #fff; box-sizing: border-box;
+  }
+  .nx-cancel label {
+    display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5c5f62;
+  }
+  .nx-btn {
+    border: 1px solid #c9cccf; background: #fff; color: #202223; border-radius: 8px;
+    padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .nx-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .nx-btn--danger {
+    border-color: #e0b3b0; background: #fbeae9; color: #8e1f0b;
+  }
   @media (max-width: 900px) {
     .nx-table-wrap { overflow-x: auto; }
-    .nx-table { min-width: 860px; }
+    .nx-table { min-width: 1020px; }
   }
 `;
 
@@ -466,25 +489,64 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
-  if (form.get("intent") !== "sync") {
-    return { error: "Unknown action." };
+  const intent = String(form.get("intent") || "");
+
+  if (intent === "sync") {
+    try {
+      const result = await syncRecentOrders(session.shop, admin);
+      return {
+        ok: true,
+        message: `Synced ${result.processed} recent order(s) from Shopify.`,
+      };
+    } catch (error) {
+      console.error("Order sync failed", error);
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to sync orders. Check read_orders scope / protected customer data.",
+      };
+    }
   }
 
-  try {
-    const result = await syncRecentOrders(session.shop, admin);
-    return {
-      ok: true,
-      message: `Synced ${result.processed} recent order(s) from Shopify.`,
-    };
-  } catch (error) {
-    console.error("Order sync failed", error);
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to sync orders. Check read_orders scope / protected customer data.",
-    };
+  if (intent === "cancel") {
+    const orderId = String(form.get("orderId") || "").trim();
+    const orderName = String(form.get("orderName") || "").trim();
+    const reason = String(form.get("reason") || "OTHER") as OrderCancelReason;
+    const restock = form.get("restock") === "on" || form.get("restock") === "true";
+    const refund = form.get("refund") === "on" || form.get("refund") === "true";
+    const notifyCustomer =
+      form.get("notifyCustomer") === "on" ||
+      form.get("notifyCustomer") === "true";
+    const staffNote = String(form.get("staffNote") || "").trim();
+
+    if (!orderId) return { error: "Missing order." };
+
+    try {
+      await cancelShopifyOrder(admin, {
+        orderId,
+        reason,
+        restock,
+        refund,
+        notifyCustomer,
+        staffNote: staffNote || `Cancelled from Multivendor Admin`,
+      });
+      return {
+        ok: true,
+        message: `Cancelled ${orderName || "order"}. Refund and restock may take a moment in Shopify.`,
+      };
+    } catch (error) {
+      console.error("Admin cancel order failed", error);
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to cancel order.",
+      };
+    }
   }
+
+  return { error: "Unknown action." };
 };
 
 export default function AdminOrdersPage() {
@@ -503,8 +565,13 @@ export default function AdminOrdersPage() {
   const [query, setQuery] = useState("");
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [cancelOpenId, setCancelOpenId] = useState<string | null>(null);
 
   const tab = (searchParams.get("tab") || "all").toLowerCase();
+  const cancellingId =
+    busy && navigation.formData?.get("intent") === "cancel"
+      ? String(navigation.formData.get("orderId") || "")
+      : "";
 
   // Server already filters by tab (Admin-matching query). Client only searches.
   const filtered = useMemo(() => {
@@ -614,6 +681,7 @@ export default function AdminOrdersPage() {
                   <th>Fulfillment</th>
                   <th>Payment</th>
                   <th>Delivery</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -629,6 +697,8 @@ export default function AdminOrdersPage() {
                   );
                   const open = expandedId === order.id;
                   const adminOrderUrl = shopifyOrderAdminUrl(order.id);
+                  const canCancel = !order.cancelledAt;
+                  const cancelOpen = cancelOpenId === order.id;
                   return (
                     <tr key={order.id}>
                       <td>
@@ -715,6 +785,84 @@ export default function AdminOrdersPage() {
                         </span>
                       </td>
                       <td>{order.delivery}</td>
+                      <td>
+                        {canCancel ? (
+                          cancelOpen ? (
+                            <Form method="post" className="nx-cancel">
+                              <input type="hidden" name="intent" value="cancel" />
+                              <input type="hidden" name="orderId" value={order.id} />
+                              <input
+                                type="hidden"
+                                name="orderName"
+                                value={order.name}
+                              />
+                              <select name="reason" defaultValue="CUSTOMER">
+                                {ORDER_CANCEL_REASONS.map((r) => (
+                                  <option key={r.value} value={r.value}>
+                                    {r.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  name="refund"
+                                  defaultChecked
+                                />
+                                Refund payment
+                              </label>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  name="restock"
+                                  defaultChecked
+                                />
+                                Restock items
+                              </label>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  name="notifyCustomer"
+                                  defaultChecked
+                                />
+                                Email customer
+                              </label>
+                              <input
+                                type="text"
+                                name="staffNote"
+                                placeholder="Staff note (optional)"
+                                maxLength={255}
+                              />
+                              <button
+                                type="submit"
+                                className="nx-btn nx-btn--danger"
+                                disabled={busy}
+                              >
+                                {cancellingId === order.id
+                                  ? "Cancelling…"
+                                  : "Confirm cancel"}
+                              </button>
+                              <button
+                                type="button"
+                                className="nx-btn"
+                                onClick={() => setCancelOpenId(null)}
+                              >
+                                Back
+                              </button>
+                            </Form>
+                          ) : (
+                            <button
+                              type="button"
+                              className="nx-btn nx-btn--danger"
+                              onClick={() => setCancelOpenId(order.id)}
+                            >
+                              Cancel order
+                            </button>
+                          )
+                        ) : (
+                          <span className="nx-badge neutral">Cancelled</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

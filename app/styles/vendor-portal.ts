@@ -63,6 +63,7 @@ export const vendorPortalStyles = `
   .sx-badge.ok { background: #e4f7e9; color: #0d6b2d; }
   .sx-badge.warn { background: #fff4d6; color: #8a6d00; }
   .sx-badge.bad { background: #fbeae9; color: #8e1f0b; }
+  .sx-badge.neutral { background: #f1f2f3; color: #5c5f62; }
   .sx-content { padding: 24px; max-width: 1100px; width: 100%; margin: 0 auto; box-sizing: border-box; }
   .sx-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 4px; }
   .sx-sub { margin: 0 0 20px; color: var(--sx-muted); font-size: 14px; }

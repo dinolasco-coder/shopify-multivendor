@@ -12,6 +12,11 @@ import { listAttributionsForVendor } from "../models/attribution.server";
 import { formatMoney } from "../utils/money";
 import { unauthenticated } from "../shopify.server";
 import { fulfillVendorLineItems } from "../services/fulfillment.server";
+import {
+  cancelShopifyOrder,
+  ORDER_CANCEL_REASONS,
+  type OrderCancelReason,
+} from "../services/orders.server";
 import prisma from "../db.server";
 
 const CARRIERS = [
@@ -43,6 +48,7 @@ type OrderStatusMap = Record<
   {
     fulfillment: string;
     financial: string;
+    cancelledAt: string | null;
     adminUrl: string;
     note: string | null;
     customerName: string;
@@ -105,6 +111,7 @@ async function fetchOrderStatuses(
               note
               email
               phone
+              cancelledAt
               customAttributes { key value }
               displayFulfillmentStatus
               displayFinancialStatus
@@ -197,6 +204,7 @@ async function fetchOrderStatuses(
         map[id] = {
           fulfillment: order.displayFulfillmentStatus || "UNFULFILLED",
           financial: order.displayFinancialStatus || "PENDING",
+          cancelledAt: order.cancelledAt ? String(order.cancelledAt) : null,
           adminUrl: `https://admin.shopify.com/store/${shopHandle}/orders/${numeric}`,
           note: order.note ? String(order.note) : null,
           customerName: shipping?.name || "Guest",
@@ -369,7 +377,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed loading order statuses for vendor", error);
   }
 
-  return { attributions, statuses };
+  // Sellers may cancel only when no other marketplace seller shares the order.
+  const soleVendorOrderIds = new Set<string>();
+  const orderIds = [...new Set(attributions.map((a) => a.shopifyOrderId))];
+  if (orderIds.length) {
+    const shared = await prisma.orderAttribution.groupBy({
+      by: ["shopifyOrderId"],
+      where: {
+        shop: vendor.shop,
+        shopifyOrderId: { in: orderIds },
+      },
+      _count: { _all: true },
+    });
+    for (const row of shared) {
+      if (row._count._all === 1) {
+        soleVendorOrderIds.add(row.shopifyOrderId);
+      }
+    }
+  }
+
+  return {
+    attributions,
+    statuses,
+    soleVendorOrderIds: [...soleVendorOrderIds],
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -378,7 +409,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { vendor } = result;
 
   const form = await request.formData();
-  if (String(form.get("intent") || "") !== "fulfill") {
+  const intent = String(form.get("intent") || "");
+
+  if (intent === "cancel") {
+    const attributionId = String(form.get("attributionId") || "");
+    const reason = String(form.get("reason") || "OTHER") as OrderCancelReason;
+    const restock =
+      form.get("restock") === "on" || form.get("restock") === "true";
+    const refund = form.get("refund") === "on" || form.get("refund") === "true";
+    const notifyCustomer =
+      form.get("notifyCustomer") === "on" ||
+      form.get("notifyCustomer") === "true";
+    const staffNote = String(form.get("staffNote") || "").trim();
+
+    if (!attributionId) return { error: "Missing order." };
+
+    const attribution = await prisma.orderAttribution.findUnique({
+      where: { id: attributionId },
+    });
+    if (!attribution || attribution.vendorId !== vendor.id) {
+      return { error: "You can only cancel your own orders." };
+    }
+
+    const otherSellers = await prisma.orderAttribution.count({
+      where: {
+        shop: vendor.shop,
+        shopifyOrderId: attribution.shopifyOrderId,
+        vendorId: { not: vendor.id },
+      },
+    });
+    if (otherSellers > 0) {
+      return {
+        error:
+          "This order also has items from another seller. Ask the store admin to cancel it.",
+      };
+    }
+
+    try {
+      const { admin } = await unauthenticated.admin(vendor.shop);
+      await cancelShopifyOrder(admin, {
+        orderId: attribution.shopifyOrderId,
+        reason,
+        restock,
+        refund,
+        notifyCustomer,
+        staffNote:
+          staffNote ||
+          `Cancelled by seller ${vendor.name} from Multivendor portal`,
+      });
+      return {
+        ok: true,
+        message: `Cancelled ${attribution.shopifyOrderName || "order"}.`,
+        attributionId,
+        cancelled: true,
+      };
+    } catch (error) {
+      console.error("Vendor cancel order failed", error);
+      return {
+        error:
+          error instanceof Error ? error.message : "Failed to cancel order.",
+      };
+    }
+  }
+
+  if (intent !== "fulfill") {
     return { error: "Unknown action." };
   }
 
@@ -449,7 +543,8 @@ type ShipDraft = {
 };
 
 export default function VendorOrders() {
-  const { attributions, statuses } = useLoaderData<typeof loader>();
+  const { attributions, statuses, soleVendorOrderIds } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -457,24 +552,44 @@ export default function VendorOrders() {
     busy && navigation.formData?.get("intent") === "fulfill"
       ? String(navigation.formData.get("attributionId") || "")
       : "";
+  const cancellingId =
+    busy && navigation.formData?.get("intent") === "cancel"
+      ? String(navigation.formData.get("attributionId") || "")
+      : "";
+
+  const soleVendorSet = useMemo(
+    () => new Set(soleVendorOrderIds),
+    [soleVendorOrderIds],
+  );
 
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
   const [shipDraft, setShipDraft] = useState<Record<string, ShipDraft>>({});
+  const [cancelOpenId, setCancelOpenId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return attributions.filter((order) => {
       const status = statuses[order.shopifyOrderId];
+      const cancelled =
+        Boolean(status?.cancelledAt) ||
+        (actionData &&
+          "cancelled" in actionData &&
+          actionData.cancelled &&
+          actionData.attributionId === order.id);
       let fulfillment = (status?.fulfillment || "").toUpperCase();
+      if (cancelled) fulfillment = "CANCELLED";
       if (
         actionData &&
         "ok" in actionData &&
-        actionData.attributionId === order.id
+        actionData.attributionId === order.id &&
+        !("cancelled" in actionData && actionData.cancelled)
       ) {
         fulfillment = "FULFILLED";
       }
-      if (tab === "unfulfilled" && fulfillment === "FULFILLED") return false;
+      if (tab === "unfulfilled" && (fulfillment === "FULFILLED" || cancelled))
+        return false;
       if (tab === "fulfilled" && fulfillment !== "FULFILLED") return false;
+      if (tab === "cancelled" && !cancelled) return false;
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
       const name = (order.shopifyOrderName || order.shopifyOrderId).toLowerCase();
@@ -501,7 +616,7 @@ export default function VendorOrders() {
     <div>
       <h1 className="sx-title">Orders</h1>
       <p className="sx-sub">
-        View orders, add tracking, mark fulfilled, and print invoices.
+        View orders, add tracking, mark fulfilled, cancel, and print invoices.
       </p>
 
       {actionData && "error" in actionData && actionData.error ? (
@@ -533,6 +648,7 @@ export default function VendorOrders() {
               { id: "all", label: "All" },
               { id: "unfulfilled", label: "Unfulfilled" },
               { id: "fulfilled", label: "Fulfilled" },
+              { id: "cancelled", label: "Cancelled" },
             ].map((t) => (
               <button
                 key={t.id}
@@ -578,17 +694,30 @@ export default function VendorOrders() {
                     imageUrl?: string | null;
                   }>;
                   const status = statuses[order.shopifyOrderId];
-                  const fulfillment = (
+                  const justCancelled =
                     actionData &&
-                    "ok" in actionData &&
-                    actionData.attributionId === order.id
-                      ? "FULFILLED"
-                      : status?.fulfillment || "UNFULFILLED"
+                    "cancelled" in actionData &&
+                    actionData.cancelled &&
+                    actionData.attributionId === order.id;
+                  const cancelled = Boolean(status?.cancelledAt) || justCancelled;
+                  const fulfillment = (
+                    cancelled
+                      ? "CANCELLED"
+                      : actionData &&
+                          "ok" in actionData &&
+                          actionData.attributionId === order.id &&
+                          !justCancelled
+                        ? "FULFILLED"
+                        : status?.fulfillment || "UNFULFILLED"
                   ).toUpperCase();
                   const financial = status?.financial || "PENDING";
                   const canFulfill =
+                    !cancelled &&
                     fulfillment !== "FULFILLED" &&
                     fulfillment !== "CANCELLED";
+                  const canCancel =
+                    !cancelled && soleVendorSet.has(order.shopifyOrderId);
+                  const cancelOpen = cancelOpenId === order.id;
                   const draft = draftFor(order.id);
                   const enrichedItems = items.map((item) => ({
                     ...item,
@@ -723,7 +852,11 @@ export default function VendorOrders() {
                       <td>
                         <span
                           className={`sx-badge ${
-                            fulfillment === "FULFILLED" ? "ok" : "warn"
+                            fulfillment === "FULFILLED"
+                              ? "ok"
+                              : fulfillment === "CANCELLED"
+                                ? "neutral"
+                                : "warn"
                           }`}
                         >
                           {labelStatus(fulfillment)}
@@ -881,6 +1014,148 @@ export default function VendorOrders() {
                                   : "Mark as fulfilled"}
                               </button>
                             </Form>
+                          ) : null}
+                          {canCancel ? (
+                            cancelOpen ? (
+                              <Form
+                                method="post"
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 6,
+                                }}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="cancel"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="attributionId"
+                                  value={order.id}
+                                />
+                                <select
+                                  name="reason"
+                                  defaultValue="CUSTOMER"
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #c9cccf",
+                                    fontSize: 13,
+                                  }}
+                                >
+                                  {ORDER_CANCEL_REASONS.map((r) => (
+                                    <option key={r.value} value={r.value}>
+                                      {r.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    fontSize: 12,
+                                    color: "#6d7175",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    name="refund"
+                                    defaultChecked
+                                  />
+                                  Refund payment
+                                </label>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    fontSize: 12,
+                                    color: "#6d7175",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    name="restock"
+                                    defaultChecked
+                                  />
+                                  Restock items
+                                </label>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    fontSize: 12,
+                                    color: "#6d7175",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    name="notifyCustomer"
+                                    defaultChecked
+                                  />
+                                  Email customer
+                                </label>
+                                <input
+                                  type="text"
+                                  name="staffNote"
+                                  placeholder="Note (optional)"
+                                  maxLength={255}
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #c9cccf",
+                                    fontSize: 13,
+                                    boxSizing: "border-box",
+                                  }}
+                                />
+                                <button
+                                  type="submit"
+                                  className="sx-btn"
+                                  disabled={busy}
+                                  style={{
+                                    background: "#fbeae9",
+                                    borderColor: "#e0b3b0",
+                                    color: "#8e1f0b",
+                                  }}
+                                >
+                                  {cancellingId === order.id
+                                    ? "Cancelling…"
+                                    : "Confirm cancel"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="sx-btn"
+                                  onClick={() => setCancelOpenId(null)}
+                                >
+                                  Back
+                                </button>
+                              </Form>
+                            ) : (
+                              <button
+                                type="button"
+                                className="sx-btn"
+                                onClick={() => setCancelOpenId(order.id)}
+                                style={{
+                                  background: "#fbeae9",
+                                  borderColor: "#e0b3b0",
+                                  color: "#8e1f0b",
+                                }}
+                              >
+                                Cancel order
+                              </button>
+                            )
+                          ) : cancelled ? (
+                            <span className="sx-badge neutral">Cancelled</span>
+                          ) : !soleVendorSet.has(order.shopifyOrderId) ? (
+                            <p className="sx-secondary">
+                              Shared order — ask admin to cancel
+                            </p>
                           ) : null}
                           <div
                             style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
