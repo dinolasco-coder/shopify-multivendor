@@ -109,12 +109,18 @@ const styles = `
   .nx-chart__label {
     margin-top: 6px; font-size: 10px; color: #6d7175; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
   }
-  .nx-table { width: 100%; border-collapse: collapse; }
+  .nx-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .nx-table th {
     text-align: left; font-size: 12px; color: #6d7175; font-weight: 600;
     padding: 8px 0; border-bottom: 1px solid #e4e5e7;
   }
-  .nx-table td { padding: 10px 0; border-bottom: 1px solid #ececec; font-size: 13px; }
+  .nx-table th:last-child, .nx-table td:last-child {
+    width: 112px; text-align: right; white-space: nowrap; vertical-align: top;
+  }
+  .nx-table td {
+    padding: 10px 0; border-bottom: 1px solid #ececec; font-size: 13px;
+    vertical-align: top; overflow-wrap: anywhere; word-break: break-word;
+  }
   .nx-table tr:last-child td { border-bottom: none; }
   .nx-secondary { color: #6d7175; font-size: 12px; }
   .nx-note { margin-top: 4px; font-size: 12px; color: #8c9196; line-height: 1.45; }
@@ -138,6 +144,14 @@ export default function AdminAnalyticsPage() {
   const maxSales = Math.max(1, ...analytics.series.map((p) => p.sales));
   const needsSetup =
     analytics.source === "fallback" || !envHasReports || !sessionHasReports;
+  // Hide noisy option/customization titles that wrap as a lone "-" next to price.
+  const topProducts = analytics.topProducts.filter((row) => {
+    const title = String(row.title || "").trim();
+    if (!title || title === "-") return false;
+    if (/custom\s*design/i.test(title)) return false;
+    if (/\s-\s*options$/i.test(title)) return false;
+    return true;
+  });
 
   function setPeriod(next: string) {
     const params = new URLSearchParams(searchParams);
@@ -310,7 +324,7 @@ export default function AdminAnalyticsPage() {
 
           <div className="nx-panel">
             <h2 className="nx-panel__title">Top products</h2>
-            {analytics.topProducts.length === 0 ? (
+            {topProducts.length === 0 ? (
               <p className="nx-secondary">
                 No product ranking yet for this period.
               </p>
@@ -323,7 +337,7 @@ export default function AdminAnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {analytics.topProducts.map((row) => (
+                  {topProducts.map((row) => (
                     <tr key={row.title}>
                       <td>{row.title}</td>
                       <td>
