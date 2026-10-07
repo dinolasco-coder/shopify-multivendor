@@ -95,9 +95,9 @@ export async function createVendorProduct(
             {
               id: variant.id,
               price: input.price,
-              // Avoid checkout "Out of stock" when location routing mismatches.
+              // Never block checkout on location/stock mismatches.
               inventoryPolicy: "CONTINUE",
-              inventoryItem: { tracked: true, requiresShipping: true },
+              inventoryItem: { tracked: false, requiresShipping: true },
             },
           ],
         },
@@ -132,15 +132,35 @@ export async function createVendorProduct(
       );
     }
 
+    // Optional qty note for Admin; keep untracked so checkout never OOS.
     if (input.inventoryQuantity >= 0) {
-      await setInventoryQuantity(
-        admin,
-        inventoryItemId,
-        input.inventoryQuantity,
+      try {
+        await setInventoryQuantity(
+          admin,
+          inventoryItemId,
+          input.inventoryQuantity,
+        );
+      } catch (error) {
+        console.error("Initial inventory set failed", product.id, error);
+      }
+      await admin.graphql(
+        `#graphql
+        mutation marketplaceCreateUntracked($id: ID!, $input: InventoryItemInput!) {
+          inventoryItemUpdate(id: $id, input: $input) {
+            userErrors { field message }
+          }
+        }`,
+        {
+          variables: {
+            id: inventoryItemId,
+            input: { tracked: false, requiresShipping: true },
+          },
+        },
       );
     }
 
     await associateVariantWithDefaultShippingProfile(admin, variant.id);
+    await setVariantContinueSelling(admin, product.id, variant.id);
   }
 
   if (input.images?.length) {
