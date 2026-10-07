@@ -89,7 +89,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           result.shippingProfile
             ? `, profile ${result.shippingProfile}`
             : ""
-        }). Clear cart and try checkout again.`,
+        }${result.warning ? `. ${result.warning}` : ""}). Clear cart and try checkout again.`,
       };
     }
 

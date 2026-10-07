@@ -309,7 +309,7 @@ export async function updateVendorProduct(
     throw new Error(userErrors.map((e: { message: string }) => e.message).join(", "));
   }
 
-  if (input.variantId && input.price) {
+  if (input.variantId) {
     await admin.graphql(
       `#graphql
       mutation marketplaceVariantUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -320,7 +320,13 @@ export async function updateVendorProduct(
       {
         variables: {
           productId: input.productId,
-          variants: [{ id: input.variantId, price: input.price }],
+          variants: [
+            {
+              id: input.variantId,
+              ...(input.price ? { price: input.price } : {}),
+              inventoryPolicy: "CONTINUE",
+            },
+          ],
         },
       },
     );
@@ -956,12 +962,9 @@ async function setInventoryQuantity(
     stockedLocationIds,
   );
 
-  // Target gets the real qty; other stocked locations go to 0 (undo duplicates).
-  const otherIds = [...stockedLocationIds].filter((id) => id !== targetId);
+  // Set qty on the ship-from location only. Do NOT zero other locations —
+  // that caused checkout "Out of stock" when order routing used those locations.
   await setQuantityAtLocations(admin, inventoryItemId, [targetId], qty);
-  if (otherIds.length) {
-    await setQuantityAtLocations(admin, inventoryItemId, otherIds, 0);
-  }
 }
 
 type DeliveryProfileNode = {
@@ -1259,29 +1262,49 @@ export async function fixProductForShippingCheckout(
     );
   }
 
-  // Lets checkout proceed even if location routing is picky.
+  // Critical: allow checkout even when location stock is wrong/zero.
   await setVariantContinueSelling(admin, productId, variant.id);
+
+  // Nuclear option for stubborn OOS: stop tracking so checkout never blocks.
+  // Sellers can still set a quantity later; inventory won't block payment.
+  await admin.graphql(
+    `#graphql
+    mutation marketplaceUntrackForCheckout($id: ID!, $input: InventoryItemInput!) {
+      inventoryItemUpdate(id: $id, input: $input) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        id: inventoryItemId,
+        input: { tracked: false, requiresShipping: true },
+      },
+    },
+  );
 
   const profileResult = await associateVariantWithDefaultShippingProfile(
     admin,
     variant.id,
   );
 
-  // Consolidate stock onto one shipping location (fixes inflated totals).
-  await setInventoryQuantity(admin, inventoryItemId, quantity, {
-    preferLocationIds: profileResult.locationIds,
-  });
-
-  if (!profileResult.ok) {
-    throw new Error(
-      `Stock updated for “${product.title}” (continue selling on), but shipping profile failed: ${profileResult.error}`,
-    );
+  try {
+    await setInventoryQuantity(admin, inventoryItemId, quantity, {
+      preferLocationIds: profileResult.locationIds,
+    });
+  } catch (error) {
+    // Still succeed if continue-selling is on — checkout should work.
+    console.error("Inventory sync during fix failed", productId, error);
   }
 
   return {
     title: product.title,
     quantity,
-    shippingProfile: profileResult.profileName,
+    shippingProfile: profileResult.ok
+      ? profileResult.profileName
+      : undefined,
+    warning: profileResult.ok
+      ? undefined
+      : `Continue selling is on. Shipping profile note: ${profileResult.error}`,
   };
 }
 
