@@ -12,7 +12,6 @@ import {
 } from "react-router";
 import {
   useCallback,
-  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -160,8 +159,6 @@ export default function AdminAddProduct() {
   const busy = navigation.state !== "idle";
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   const vendorId = vendors[0]?.id || "";
   const [photo, setPhoto] = useState<File | null>(null);
@@ -174,33 +171,8 @@ export default function AdminAddProduct() {
   const [showMore, setShowMore] = useState(false);
   const [phase, setPhase] = useState<"edit" | "preview">("edit");
   const [method, setMethod] = useState<AddMethod>("choose");
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraStarting, setCameraStarting] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const hasPhoto = Boolean(photo && preview);
-
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setCameraOpen(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cameraOpen || !streamRef.current || !videoRef.current) return;
-    const video = videoRef.current;
-    video.srcObject = streamRef.current;
-    void video.play().catch(() => {
-      setCameraError("Could not start the camera preview. Try again.");
-    });
-  }, [cameraOpen]);
 
   const applyPhoto = useCallback((file: File | undefined) => {
     if (!file || !file.type.startsWith("image/")) return;
@@ -211,148 +183,6 @@ export default function AdminAddProduct() {
     });
   }, []);
 
-  const openCameraPopup = useCallback(() => {
-    setCameraError(null);
-    setCameraStarting(true);
-
-    const url = new URL("/app/products/camera", window.location.origin);
-    url.search = window.location.search;
-    const popup = window.open(
-      url.toString(),
-      "marketplace-product-camera",
-      "popup=yes,width=720,height=820",
-    );
-
-    if (!popup) {
-      setCameraStarting(false);
-      setCameraError(
-        "Allow popups for this site to use the camera, or choose a photo from your files.",
-      );
-      return;
-    }
-
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      const data = event.data;
-      if (!data || data.type !== "marketplace-camera-capture" || !data.dataUrl) {
-        return;
-      }
-      window.removeEventListener("message", onMessage);
-      clearInterval(closedCheck);
-      setCameraStarting(false);
-
-      fetch(String(data.dataUrl))
-        .then((res) => res.blob())
-        .then((blob) => {
-          const file = new File([blob], `product-${Date.now()}.jpg`, {
-            type: "image/jpeg",
-          });
-          applyPhoto(file);
-        })
-        .catch(() => {
-          setCameraError("Could not use the captured photo. Try again.");
-        });
-    };
-
-    window.addEventListener("message", onMessage);
-
-    const closedCheck = window.setInterval(() => {
-      if (popup.closed) {
-        window.clearInterval(closedCheck);
-        window.removeEventListener("message", onMessage);
-        setCameraStarting(false);
-      }
-    }, 400);
-  }, [applyPhoto]);
-
-  const openLaptopCamera = useCallback(async () => {
-    // Shopify Admin iframe blocks camera — use a top-level popup instead.
-    const inIframe = (() => {
-      try {
-        return window.self !== window.top;
-      } catch {
-        return true;
-      }
-    })();
-    if (inIframe) {
-      openCameraPopup();
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError(
-        "This browser cannot open the laptop camera. Use Choose from gallery, or try Chrome.",
-      );
-      return;
-    }
-
-    setCameraError(null);
-    setCameraStarting(true);
-    stopCamera();
-
-    try {
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        });
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: "user",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        });
-      }
-      streamRef.current = stream;
-      setCameraOpen(true);
-      setCameraStarting(false);
-    } catch {
-      setCameraStarting(false);
-      setCameraOpen(false);
-      // Fall back to popup if inline camera is blocked.
-      openCameraPopup();
-    }
-  }, [openCameraPopup, stopCamera]);
-
-  const captureFromWebcam = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) {
-      setCameraError(
-        "Camera is still starting. Wait a second, then tap Take photo.",
-      );
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          setCameraError("Could not capture the photo. Try again.");
-          return;
-        }
-        const file = new File([blob], `product-${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        });
-        applyPhoto(file);
-        stopCamera();
-      },
-      "image/jpeg",
-      0.92,
-    );
-  }, [applyPhoto, stopCamera]);
-
   const onFileInput = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       applyPhoto(event.target.files?.[0]);
@@ -362,14 +192,13 @@ export default function AdminAddProduct() {
   );
 
   const clearPhoto = useCallback(() => {
-    stopCamera();
     setPhoto(null);
     setPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
     setPhase("edit");
-  }, [stopCamera]);
+  }, []);
 
   const bumpQty = useCallback((delta: number) => {
     setInventoryQuantity((prev) => {
@@ -432,19 +261,17 @@ export default function AdminAddProduct() {
 
   const goToPreview = useCallback(() => {
     if (!canPreview) return;
-    stopCamera();
     setPhase("preview");
-  }, [canPreview, stopCamera]);
+  }, [canPreview]);
 
   const backToEdit = useCallback(() => {
     setPhase("edit");
   }, []);
 
   const backToChoose = useCallback(() => {
-    stopCamera();
     setPhase("edit");
     setMethod("choose");
-  }, [stopCamera]);
+  }, []);
 
   const pageTitle =
     phase === "preview"
@@ -510,7 +337,7 @@ export default function AdminAddProduct() {
                   1. Photo first (easy)
                 </Button>
                 <Text as="p" tone="subdued">
-                  Take a photo, then type the name and price.
+                  Upload a photo, then type the name and price.
                 </Text>
                 <Button size="large" fullWidth onClick={() => setMethod("manual")}>
                   2. Type it yourself (manual)
@@ -631,51 +458,16 @@ export default function AdminAddProduct() {
           ) : method === "easy" ? (
             <>
               <Text as="p" variant="bodyLg">
-                First take a photo, then type the name and price. You will see a
+                First add a photo, then type the name and price. You will see a
                 preview before saving.
               </Text>
 
               <Step
                 number={1}
-                title="Take a photo of your product"
-                hint="This comes first. Open your laptop camera, or choose a picture from your files."
+                title="Add a photo of your product"
+                hint="This comes first. Choose a picture from your files."
               >
-                {cameraError ? (
-                  <Banner tone="critical" onDismiss={() => setCameraError(null)}>
-                    {cameraError}
-                  </Banner>
-                ) : null}
-
-                {cameraOpen ? (
-                  <BlockStack gap="300">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{
-                        width: "100%",
-                        maxHeight: 420,
-                        objectFit: "cover",
-                        borderRadius: 12,
-                        background: "#111",
-                        display: "block",
-                        transform: "scaleX(-1)",
-                      }}
-                    />
-                    <Button
-                      variant="primary"
-                      size="large"
-                      fullWidth
-                      onClick={captureFromWebcam}
-                    >
-                      Take photo
-                    </Button>
-                    <Button size="large" fullWidth onClick={stopCamera}>
-                      Close camera
-                    </Button>
-                  </BlockStack>
-                ) : preview ? (
+                {preview ? (
                   <BlockStack gap="300">
                     <img
                       src={preview}
@@ -689,8 +481,11 @@ export default function AdminAddProduct() {
                       }}
                     />
                     <InlineStack gap="300">
-                      <Button size="large" onClick={openLaptopCamera}>
-                        Take another photo
+                      <Button
+                        size="large"
+                        onClick={() => galleryInputRef.current?.click()}
+                      >
+                        Change photo
                       </Button>
                       <Button size="large" tone="critical" onClick={clearPhoto}>
                         Remove photo
@@ -698,24 +493,14 @@ export default function AdminAddProduct() {
                     </InlineStack>
                   </BlockStack>
                 ) : (
-                  <BlockStack gap="300">
-                    <Button
-                      variant="primary"
-                      size="large"
-                      fullWidth
-                      loading={cameraStarting}
-                      onClick={openLaptopCamera}
-                    >
-                      Open camera
-                    </Button>
-                    <Button
-                      size="large"
-                      fullWidth
-                      onClick={() => galleryInputRef.current?.click()}
-                    >
-                      Choose from gallery
-                    </Button>
-                  </BlockStack>
+                  <Button
+                    variant="primary"
+                    size="large"
+                    fullWidth
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    Choose from gallery
+                  </Button>
                 )}
               </Step>
 
@@ -966,44 +751,9 @@ export default function AdminAddProduct() {
               <Step
                 number={6}
                 title="Photo (optional)"
-                hint="Open your camera or choose a picture from your files."
+                hint="Choose a picture from your files."
               >
-                {cameraError ? (
-                  <Banner tone="critical" onDismiss={() => setCameraError(null)}>
-                    {cameraError}
-                  </Banner>
-                ) : null}
-
-                {cameraOpen ? (
-                  <BlockStack gap="300">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{
-                        width: "100%",
-                        maxHeight: 360,
-                        objectFit: "cover",
-                        borderRadius: 12,
-                        background: "#111",
-                        display: "block",
-                        transform: "scaleX(-1)",
-                      }}
-                    />
-                    <Button
-                      variant="primary"
-                      size="large"
-                      fullWidth
-                      onClick={captureFromWebcam}
-                    >
-                      Take photo
-                    </Button>
-                    <Button size="large" fullWidth onClick={stopCamera}>
-                      Close camera
-                    </Button>
-                  </BlockStack>
-                ) : preview ? (
+                {preview ? (
                   <BlockStack gap="300">
                     <img
                       src={preview}
@@ -1017,7 +767,10 @@ export default function AdminAddProduct() {
                       }}
                     />
                     <InlineStack gap="300">
-                      <Button size="large" onClick={openLaptopCamera}>
+                      <Button
+                        size="large"
+                        onClick={() => galleryInputRef.current?.click()}
+                      >
                         Change photo
                       </Button>
                       <Button size="large" tone="critical" onClick={clearPhoto}>
@@ -1026,23 +779,13 @@ export default function AdminAddProduct() {
                     </InlineStack>
                   </BlockStack>
                 ) : (
-                  <BlockStack gap="300">
-                    <Button
-                      size="large"
-                      fullWidth
-                      loading={cameraStarting}
-                      onClick={openLaptopCamera}
-                    >
-                      Open camera
-                    </Button>
-                    <Button
-                      size="large"
-                      fullWidth
-                      onClick={() => galleryInputRef.current?.click()}
-                    >
-                      Choose from gallery
-                    </Button>
-                  </BlockStack>
+                  <Button
+                    size="large"
+                    fullWidth
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    Choose from gallery
+                  </Button>
                 )}
               </Step>
 
