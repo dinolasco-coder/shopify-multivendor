@@ -1296,6 +1296,22 @@ export async function fixProductForShippingCheckout(
     console.error("Inventory sync during fix failed", productId, error);
   }
 
+  // Keep untracked after qty sync (setInventoryQuantity re-enables tracking).
+  await admin.graphql(
+    `#graphql
+    mutation marketplaceKeepUntracked($id: ID!, $input: InventoryItemInput!) {
+      inventoryItemUpdate(id: $id, input: $input) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        id: inventoryItemId,
+        input: { tracked: false, requiresShipping: true },
+      },
+    },
+  );
+
   return {
     title: product.title,
     quantity,
