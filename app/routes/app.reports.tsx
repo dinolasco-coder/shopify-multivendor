@@ -109,17 +109,22 @@ const styles = `
   .nx-chart__label {
     margin-top: 6px; font-size: 10px; color: #6d7175; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
   }
-  .nx-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .nx-table { width: 100%; border-collapse: collapse; }
   .nx-table th {
     text-align: left; font-size: 12px; color: #6d7175; font-weight: 600;
     padding: 8px 0; border-bottom: 1px solid #e4e5e7;
   }
   .nx-table th:last-child, .nx-table td:last-child {
-    width: 112px; text-align: right; white-space: nowrap; vertical-align: top;
+    width: 1%; text-align: right; white-space: nowrap; vertical-align: top;
+    padding-left: 16px;
   }
   .nx-table td {
     padding: 10px 0; border-bottom: 1px solid #ececec; font-size: 13px;
-    vertical-align: top; overflow-wrap: anywhere; word-break: break-word;
+    vertical-align: top; word-break: normal; overflow-wrap: break-word;
+  }
+  .nx-table td:first-child {
+    width: auto; min-width: 0; padding-right: 12px;
+    white-space: normal; hyphens: none;
   }
   .nx-table tr:last-child td { border-bottom: none; }
   .nx-secondary { color: #6d7175; font-size: 12px; }
