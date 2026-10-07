@@ -15,11 +15,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { listAttributionsForShop } from "../models/attribution.server";
 import { syncRecentOrders } from "../services/commission.server";
+import { cancelShopifyOrder } from "../services/orders.server";
 import {
-  cancelShopifyOrder,
   ORDER_CANCEL_REASONS,
   type OrderCancelReason,
-} from "../services/orders.server";
+} from "../utils/order-cancel";
 import { formatMoney } from "../utils/money";
 
 function shopifyAdminPath(path: string) {
