@@ -717,17 +717,6 @@ async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
   return primary;
 }
 
-/** All locations checkout can sell from (stock must exist here). */
-async function resolveOnlineInventoryLocations(
-  admin: AdminGraphql,
-): Promise<InventoryLocation[]> {
-  const { online, active } = await listInventoryLocations(admin);
-  if (online.length) return online;
-  const primary = await resolveInventoryLocation(admin);
-  const match = active.find((l) => l.id === primary.id);
-  return match ? [match] : [{ id: primary.id, name: primary.name }];
-}
-
 async function getInventoryItemId(
   admin: AdminGraphql,
   productId: string,
