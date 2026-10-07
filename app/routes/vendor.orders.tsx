@@ -12,11 +12,11 @@ import { listAttributionsForVendor } from "../models/attribution.server";
 import { formatMoney } from "../utils/money";
 import { unauthenticated } from "../shopify.server";
 import { fulfillVendorLineItems } from "../services/fulfillment.server";
+import { cancelShopifyOrder } from "../services/orders.server";
 import {
-  cancelShopifyOrder,
   ORDER_CANCEL_REASONS,
   type OrderCancelReason,
-} from "../services/orders.server";
+} from "../utils/order-cancel";
 import prisma from "../db.server";
 
 const CARRIERS = [
