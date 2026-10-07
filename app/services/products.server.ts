@@ -971,45 +971,143 @@ async function setInventoryQuantity(
   );
 }
 
+type DeliveryProfileNode = {
+  id: string;
+  name?: string;
+  default?: boolean;
+  profileLocationGroups?: Array<{
+    locationGroup?: {
+      locations?: {
+        nodes?: Array<{ id: string; name?: string; fulfillsOnlineOrders?: boolean }>;
+      };
+    };
+    locationGroupZones?: {
+      nodes?: Array<{
+        methodDefinitionsCount?: { count?: number } | null;
+        methodDefinitions?: {
+          nodes?: Array<{ id?: string; active?: boolean | null }>;
+        };
+      }>;
+    };
+  }>;
+};
+
+async function loadDeliveryProfiles(
+  admin: AdminGraphql,
+): Promise<{ profiles: DeliveryProfileNode[]; error?: string }> {
+  const profilesResponse = await admin.graphql(
+    `#graphql
+    query marketplaceDeliveryProfilesDetailed {
+      deliveryProfiles(first: 25) {
+        nodes {
+          id
+          name
+          default
+          profileLocationGroups {
+            locationGroup {
+              locations(first: 50) {
+                nodes { id name fulfillsOnlineOrders }
+              }
+            }
+            locationGroupZones(first: 20) {
+              nodes {
+                methodDefinitions(first: 20) {
+                  nodes { id active }
+                }
+              }
+            }
+          }
+        }
+      }
+    }`,
+  );
+  const profilesJson = await profilesResponse.json();
+  if (profilesJson.errors?.length) {
+    const msg = profilesJson.errors
+      .map((e: { message: string }) => e.message)
+      .join(", ");
+    const needsScope = /access denied|shipping|scope|not approved/i.test(msg);
+    return {
+      profiles: [],
+      error: needsScope
+        ? "Missing shipping permissions. Add read_shipping,write_shipping to Railway SCOPES, redeploy, then Multivendor → Settings → Re-authorize Shopify permissions."
+        : msg,
+    };
+  }
+  return { profiles: profilesJson.data?.deliveryProfiles?.nodes ?? [] };
+}
+
+function countActiveShippingMethods(profile: DeliveryProfileNode): number {
+  let count = 0;
+  for (const group of profile.profileLocationGroups || []) {
+    for (const zone of group.locationGroupZones?.nodes || []) {
+      for (const method of zone.methodDefinitions?.nodes || []) {
+        if (method?.id && method.active !== false) count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function locationsForProfile(profile: DeliveryProfileNode): InventoryLocation[] {
+  const out: InventoryLocation[] = [];
+  const seen = new Set<string>();
+  for (const group of profile.profileLocationGroups || []) {
+    for (const loc of group.locationGroup?.locations?.nodes || []) {
+      if (!loc?.id || seen.has(loc.id)) continue;
+      seen.add(loc.id);
+      out.push({
+        id: loc.id,
+        name: loc.name,
+        fulfillsOnlineOrders: loc.fulfillsOnlineOrders,
+      });
+    }
+  }
+  return out;
+}
+
+function pickBestShippingProfile(
+  profiles: DeliveryProfileNode[],
+): DeliveryProfileNode | null {
+  if (!profiles.length) return null;
+  const scored = [...profiles].sort((a, b) => {
+    const methodsDiff =
+      countActiveShippingMethods(b) - countActiveShippingMethods(a);
+    if (methodsDiff !== 0) return methodsDiff;
+    if (Boolean(b.default) !== Boolean(a.default)) return b.default ? 1 : -1;
+    if (/general/i.test(b.name || "") !== /general/i.test(a.name || "")) {
+      return /general/i.test(b.name || "") ? 1 : -1;
+    }
+    return 0;
+  });
+  return scored[0] || null;
+}
+
 /**
- * Put seller variants on the shop's default shipping profile so checkout
+ * Put seller variants on a shipping profile that has active rates so checkout
  * can show Ship (not only Pickup). Requires read_shipping + write_shipping.
- * Soft-fails if scopes are missing.
  */
 export async function associateVariantWithDefaultShippingProfile(
   admin: AdminGraphql,
   variantId: string,
-): Promise<{ ok: boolean; profileName?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  profileName?: string;
+  locationIds?: string[];
+  error?: string;
+}> {
   try {
-    const profilesResponse = await admin.graphql(
-      `#graphql
-      query marketplaceDeliveryProfiles {
-        deliveryProfiles(first: 20) {
-          nodes {
-            id
-            name
-            default
-          }
-        }
-      }`,
-    );
-    const profilesJson = await profilesResponse.json();
-    if (profilesJson.errors?.length) {
+    const { profiles, error } = await loadDeliveryProfiles(admin);
+    if (error) return { ok: false, error };
+    const profile = pickBestShippingProfile(profiles);
+    if (!profile?.id) {
+      return { ok: false, error: "No shipping profile found in this shop." };
+    }
+    if (countActiveShippingMethods(profile) === 0) {
       return {
         ok: false,
-        error: profilesJson.errors
-          .map((e: { message: string }) => e.message)
-          .join(", "),
+        error: `Shipping profile “${profile.name || "General"}” has no active shipping rates. Add SPX/rates in Settings → Shipping and delivery.`,
       };
-    }
-    const nodes: Array<{ id: string; name?: string; default?: boolean }> =
-      profilesJson.data?.deliveryProfiles?.nodes ?? [];
-    const profile =
-      nodes.find((p) => p.default) ||
-      nodes.find((p) => /general/i.test(p.name || "")) ||
-      nodes[0];
-    if (!profile?.id) {
-      return { ok: false, error: "No shipping profile found." };
     }
 
     const updateResponse = await admin.graphql(
@@ -1032,11 +1130,14 @@ export async function associateVariantWithDefaultShippingProfile(
     );
     const updateJson = await updateResponse.json();
     if (updateJson.errors?.length) {
+      const msg = updateJson.errors
+        .map((e: { message: string }) => e.message)
+        .join(", ");
       return {
         ok: false,
-        error: updateJson.errors
-          .map((e: { message: string }) => e.message)
-          .join(", "),
+        error: /access denied|scope|not approved/i.test(msg)
+          ? "Missing write_shipping permission. Multivendor → Settings → Re-authorize Shopify permissions, then try again."
+          : msg,
       };
     }
     const userErrors =
@@ -1047,10 +1148,12 @@ export async function associateVariantWithDefaultShippingProfile(
         error: userErrors.map((e: { message: string }) => e.message).join(", "),
       };
     }
+    const locs = locationsForProfile(profile);
     return {
       ok: true,
       profileName:
         updateJson.data?.deliveryProfileUpdate?.profile?.name || profile.name,
+      locationIds: locs.map((l) => l.id),
     };
   } catch (error) {
     return {
@@ -1060,14 +1163,51 @@ export async function associateVariantWithDefaultShippingProfile(
   }
 }
 
+async function readMaxAvailableQuantity(
+  admin: AdminGraphql,
+  inventoryItemId: string,
+  fallback: number,
+): Promise<number> {
+  const levelsResponse = await admin.graphql(
+    `#graphql
+    query marketplaceInventoryQty($id: ID!) {
+      inventoryItem(id: $id) {
+        inventoryLevels(first: 50) {
+          nodes {
+            quantities(names: ["available", "on_hand"]) {
+              name
+              quantity
+            }
+          }
+        }
+      }
+    }`,
+    { variables: { id: inventoryItemId } },
+  );
+  const levelsJson = await levelsResponse.json();
+  let max = fallback;
+  for (const level of levelsJson.data?.inventoryItem?.inventoryLevels?.nodes ??
+    []) {
+    for (const q of level.quantities || []) {
+      if (typeof q.quantity === "number" && q.quantity > max) max = q.quantity;
+    }
+  }
+  return Math.max(0, Math.floor(max));
+}
+
 /**
  * Repair a marketplace product for Ship checkout:
- * stock on online locations + requires shipping + default shipping profile.
+ * stock on shipping-profile locations + requires shipping + shipping profile.
  */
 export async function fixProductForShippingCheckout(
   admin: AdminGraphql,
   productId: string,
-): Promise<{ title: string; quantity: number; shippingProfile?: string }> {
+): Promise<{
+  title: string;
+  quantity: number;
+  shippingProfile?: string;
+  warning?: string;
+}> {
   const product = await getProductDetail(admin, productId);
   if (!product) throw new Error("Product not found.");
 
@@ -1077,25 +1217,58 @@ export async function fixProductForShippingCheckout(
     throw new Error(`"${product.title}" has no inventory item.`);
   }
 
-  const quantity = Math.max(
+  const fallbackQty = Math.max(
     0,
     Math.floor(Number(variant.inventoryQuantity ?? product.totalInventory ?? 0)),
   );
-  // Keep at least current stock; if Shopify reports 0 but UI had stock elsewhere,
-  // setInventoryQuantity still activates online locations.
-  await setInventoryQuantity(admin, inventoryItemId, quantity || 0);
+  const quantity = await readMaxAvailableQuantity(
+    admin,
+    inventoryItemId,
+    fallbackQty,
+  );
+  if (quantity <= 0) {
+    throw new Error(
+      `"${product.title}" has 0 stock. Set quantity in seller Edit or Shopify Admin first, then Fix shipping again.`,
+    );
+  }
 
   const profileResult = await associateVariantWithDefaultShippingProfile(
     admin,
     variant.id,
   );
 
+  // Prefer stock on locations that belong to the shipping profile (Ship uses these).
+  if (profileResult.ok && profileResult.locationIds?.length) {
+    const stocked = new Set<string>();
+    for (const locationId of profileResult.locationIds) {
+      await activateInventoryAtLocation(
+        admin,
+        inventoryItemId,
+        locationId,
+        stocked,
+      );
+    }
+    await setQuantityAtLocations(
+      admin,
+      inventoryItemId,
+      profileResult.locationIds,
+      quantity,
+    );
+  }
+
+  // Also sync all online-fulfill locations (covers mixed pickup/ship shops).
+  await setInventoryQuantity(admin, inventoryItemId, quantity);
+
+  if (!profileResult.ok) {
+    throw new Error(
+      `Stock updated for “${product.title}”, but shipping profile failed: ${profileResult.error}`,
+    );
+  }
+
   return {
     title: product.title,
     quantity,
-    shippingProfile: profileResult.ok
-      ? profileResult.profileName
-      : undefined,
+    shippingProfile: profileResult.profileName,
   };
 }
 

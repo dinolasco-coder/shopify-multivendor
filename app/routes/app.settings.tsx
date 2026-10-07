@@ -40,8 +40,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     "read_merchant_managed_fulfillment_orders",
     "write_merchant_managed_fulfillment_orders",
   ];
+  const needShipping = ["read_shipping", "write_shipping"];
   const envHasFulfillment = need.every((s) => scopesConfigured.includes(s));
   const sessionHasFulfillment = need.every((s) => sessionScopes.includes(s));
+  const envHasShipping = needShipping.every((s) =>
+    scopesConfigured.includes(s),
+  );
+  const sessionHasShipping = needShipping.every((s) =>
+    sessionScopes.includes(s),
+  );
 
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const install = new URL(`https://${session.shop}/admin/oauth/install`);
@@ -59,6 +66,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionScopes,
     hasFulfillmentScopes: envHasFulfillment,
     sessionHasFulfillmentScopes: sessionHasFulfillment,
+    hasShippingScopes: envHasShipping,
+    sessionHasShippingScopes: sessionHasShipping,
     // Full-window Shopify install URL (updates required scopes). Avoid /auth JSON "null".
     reauthUrl: install.toString(),
   };
@@ -127,6 +136,8 @@ export default function SettingsPage() {
     sessionScopes,
     hasFulfillmentScopes,
     sessionHasFulfillmentScopes,
+    hasShippingScopes,
+    sessionHasShippingScopes,
     reauthUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -169,6 +180,25 @@ export default function SettingsPage() {
         ) : (
           <div className="nx-banner ok">
             Fulfillment permissions look ready for this shop.
+          </div>
+        )}
+
+        {!hasShippingScopes ? (
+          <div className="nx-banner err">
+            Railway <strong>SCOPES</strong> is missing{" "}
+            <strong>read_shipping,write_shipping</strong>. Add them, redeploy,
+            then Re-authorize — needed so seller products can show Ship at
+            checkout.
+          </div>
+        ) : !sessionHasShippingScopes ? (
+          <div className="nx-banner err">
+            Shipping scopes are on the server, but this shop has not approved
+            them yet. Click <strong>Re-authorize Shopify permissions</strong>{" "}
+            and accept shipping access.
+          </div>
+        ) : (
+          <div className="nx-banner ok">
+            Shipping permissions look ready for this shop.
           </div>
         )}
 
@@ -288,6 +318,12 @@ export default function SettingsPage() {
               <br />
               This shop token has fulfillment scopes:{" "}
               <strong>{sessionHasFulfillmentScopes ? "Yes" : "No"}</strong>
+              <br />
+              Server has shipping scopes:{" "}
+              <strong>{hasShippingScopes ? "Yes" : "No"}</strong>
+              <br />
+              This shop token has shipping scopes:{" "}
+              <strong>{sessionHasShippingScopes ? "Yes" : "No"}</strong>
             </p>
             <p style={{ fontSize: 12, color: "#6d7175" }}>
               Shop token scopes:{" "}
