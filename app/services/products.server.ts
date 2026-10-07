@@ -623,16 +623,20 @@ async function publishProductToStorefronts(
   }
 }
 
-async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
+type InventoryLocation = {
   id: string;
   name?: string;
-}> {
-  const preferredName = (process.env.VENDOR_INVENTORY_LOCATION_NAME || "")
-    .trim()
-    .toLowerCase();
-  const preferredId = (process.env.VENDOR_INVENTORY_LOCATION_ID || "").trim();
+  isActive?: boolean;
+  fulfillsOnlineOrders?: boolean;
+};
 
-  // `location` with no id = shop default / primary location (Settings → Locations).
+async function listInventoryLocations(
+  admin: AdminGraphql,
+): Promise<{
+  active: InventoryLocation[];
+  online: InventoryLocation[];
+  defaultLocation: InventoryLocation | null;
+}> {
   const locResponse = await admin.graphql(
     `#graphql
     query marketplaceInventoryLocations {
@@ -642,7 +646,7 @@ async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
         isActive
         fulfillsOnlineOrders
       }
-      locations(first: 20) {
+      locations(first: 50) {
         nodes {
           id
           name
@@ -659,46 +663,67 @@ async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
     );
   }
 
-  const locations: Array<{
-    id: string;
-    name?: string;
-    isActive?: boolean;
-    fulfillsOnlineOrders?: boolean;
-  }> = locJson.data?.locations?.nodes ?? [];
+  const locations: InventoryLocation[] =
+    locJson.data?.locations?.nodes ?? [];
   const active = locations.filter((l) => l.isActive !== false);
-  const defaultLocation = locJson.data?.defaultLocation as
-    | {
-        id: string;
-        name?: string;
-        isActive?: boolean;
-        fulfillsOnlineOrders?: boolean;
-      }
-    | null
-    | undefined;
+  const defaultLocation = (locJson.data?.defaultLocation ??
+    null) as InventoryLocation | null;
+  const online = active.filter((l) => l.fulfillsOnlineOrders);
+
+  return { active, online, defaultLocation };
+}
+
+/**
+ * Pick where seller stock should live for checkout.
+ * Always prefer locations that fulfill online orders — otherwise Admin can
+ * show quantity while Checkout says "Out of stock".
+ */
+async function resolveInventoryLocation(admin: AdminGraphql): Promise<{
+  id: string;
+  name?: string;
+}> {
+  const preferredName = (process.env.VENDOR_INVENTORY_LOCATION_NAME || "")
+    .trim()
+    .toLowerCase();
+  const preferredId = (process.env.VENDOR_INVENTORY_LOCATION_ID || "").trim();
+  const { active, online, defaultLocation } =
+    await listInventoryLocations(admin);
 
   const nameIncludes = (l: { name?: string }, needle: string) =>
     (l.name || "").toLowerCase().includes(needle);
 
-  // Prefer the merchant's "Shop" location (what checkout uses), then default.
+  // Prefer online-fulfilling locations first (checkout uses these).
+  const pool = online.length ? online : active;
+
   const primary =
-    (preferredId && active.find((l) => l.id === preferredId)) ||
-    (preferredName && active.find((l) => nameIncludes(l, preferredName))) ||
-    active.find((l) => nameIncludes(l, "shop") && l.fulfillsOnlineOrders) ||
-    active.find((l) => nameIncludes(l, "shop")) ||
+    (preferredId && pool.find((l) => l.id === preferredId)) ||
+    (preferredName && pool.find((l) => nameIncludes(l, preferredName))) ||
+    pool.find((l) => nameIncludes(l, "shop")) ||
+    (defaultLocation?.id &&
+      pool.find((l) => l.id === defaultLocation.id)) ||
     (defaultLocation?.isActive !== false &&
       defaultLocation?.fulfillsOnlineOrders &&
       defaultLocation) ||
-    active.find((l) => l.fulfillsOnlineOrders) ||
-    (defaultLocation?.isActive !== false && defaultLocation) ||
-    active[0] ||
-    locations[0];
+    pool[0] ||
+    active[0];
 
   if (!primary?.id) {
     throw new Error(
-      "No active shop location found to store inventory. Add a location in Shopify Admin → Settings → Locations.",
+      "No active shop location found to store inventory. Add a location in Shopify Admin → Settings → Locations, and turn on “Fulfill online orders” for that location.",
     );
   }
   return primary;
+}
+
+/** All locations checkout can sell from (stock must exist here). */
+async function resolveOnlineInventoryLocations(
+  admin: AdminGraphql,
+): Promise<InventoryLocation[]> {
+  const { online, active } = await listInventoryLocations(admin);
+  if (online.length) return online;
+  const primary = await resolveInventoryLocation(admin);
+  const match = active.find((l) => l.id === primary.id);
+  return match ? [match] : [{ id: primary.id, name: primary.name }];
 }
 
 async function getInventoryItemId(
@@ -731,12 +756,142 @@ async function getInventoryItemId(
   return match?.inventoryItem?.id ?? nodes[0]?.inventoryItem?.id ?? null;
 }
 
+async function activateInventoryAtLocation(
+  admin: AdminGraphql,
+  inventoryItemId: string,
+  locationId: string,
+  stockedLocationIds: Set<string>,
+) {
+  if (stockedLocationIds.has(locationId)) return;
+
+  const activateResponse = await admin.graphql(
+    `#graphql
+    mutation marketplaceActivateInventory(
+      $inventoryItemId: ID!
+      $locationId: ID!
+    ) {
+      inventoryActivate(
+        inventoryItemId: $inventoryItemId
+        locationId: $locationId
+      ) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        inventoryItemId,
+        locationId,
+      },
+    },
+  );
+  const activateJson = await activateResponse.json();
+  if (activateJson.errors?.length) {
+    throw new Error(
+      activateJson.errors
+        .map((e: { message: string }) => e.message)
+        .join(", "),
+    );
+  }
+  const activateErrors =
+    activateJson.data?.inventoryActivate?.userErrors ?? [];
+  const alreadyActive = activateErrors.some((e: { message?: string }) =>
+    /already.?stocked|already.?activated|already active|not allowed to set available/i.test(
+      e.message ?? "",
+    ),
+  );
+  if (activateErrors.length && !alreadyActive) {
+    throw new Error(
+      activateErrors.map((e: { message: string }) => e.message).join(", "),
+    );
+  }
+  stockedLocationIds.add(locationId);
+}
+
+async function setQuantityAtLocations(
+  admin: AdminGraphql,
+  inventoryItemId: string,
+  locationIds: string[],
+  quantity: number,
+) {
+  const quantities = locationIds.map((locationId) => ({
+    inventoryItemId,
+    locationId,
+    quantity,
+  }));
+
+  const setResponse = await admin.graphql(
+    `#graphql
+    mutation marketplaceSetInventory($input: InventorySetQuantitiesInput!) {
+      inventorySetQuantities(input: $input) {
+        inventoryAdjustmentGroup {
+          changes { name delta quantityAfterChange }
+        }
+        userErrors { field message code }
+      }
+    }`,
+    {
+      variables: {
+        input: {
+          name: "on_hand",
+          reason: "correction",
+          ignoreCompareQuantity: true,
+          quantities,
+        },
+      },
+    },
+  );
+  const setJson = await setResponse.json();
+  if (setJson.errors?.length) {
+    throw new Error(
+      setJson.errors.map((e: { message: string }) => e.message).join(", "),
+    );
+  }
+  const setErrors = setJson.data?.inventorySetQuantities?.userErrors ?? [];
+  if (!setErrors.length) return;
+
+  // Fallback: some shops reject on_hand; try available.
+  const fallback = await admin.graphql(
+    `#graphql
+    mutation marketplaceSetInventoryAvailable($input: InventorySetQuantitiesInput!) {
+      inventorySetQuantities(input: $input) {
+        userErrors { field message code }
+      }
+    }`,
+    {
+      variables: {
+        input: {
+          name: "available",
+          reason: "correction",
+          ignoreCompareQuantity: true,
+          quantities,
+        },
+      },
+    },
+  );
+  const fallbackJson = await fallback.json();
+  const fallbackErrors =
+    fallbackJson.data?.inventorySetQuantities?.userErrors ?? [];
+  if (fallbackJson.errors?.length || fallbackErrors.length) {
+    throw new Error(
+      [
+        ...setErrors.map((e: { message: string }) => e.message),
+        ...(fallbackJson.errors ?? []).map(
+          (e: { message: string }) => e.message,
+        ),
+        ...fallbackErrors.map((e: { message: string }) => e.message),
+      ].join(", "),
+    );
+  }
+}
+
 async function setInventoryQuantity(
   admin: AdminGraphql,
   inventoryItemId: string,
   quantity: number,
 ) {
-  const primary = await resolveInventoryLocation(admin);
+  // Write stock to every location that fulfills online orders so Checkout
+  // and Admin product quantity stay aligned.
+  const targets = await resolveOnlineInventoryLocations(admin);
   const qty = Math.max(0, Math.floor(quantity));
 
   const levelsResponse = await admin.graphql(
@@ -745,7 +900,7 @@ async function setInventoryQuantity(
       inventoryItem(id: $id) {
         id
         tracked
-        inventoryLevels(first: 20) {
+        inventoryLevels(first: 50) {
           nodes {
             location { id name }
             quantities(names: ["available", "on_hand"]) {
@@ -796,127 +951,21 @@ async function setInventoryQuantity(
     );
   }
 
-  // Activate at shop location without setting qty (qty set below).
-  // Passing `available` fails when the item is already active there.
-  if (!stockedLocationIds.has(primary.id)) {
-    const activateResponse = await admin.graphql(
-      `#graphql
-      mutation marketplaceActivateInventory(
-        $inventoryItemId: ID!
-        $locationId: ID!
-      ) {
-        inventoryActivate(
-          inventoryItemId: $inventoryItemId
-          locationId: $locationId
-        ) {
-          userErrors { field message }
-        }
-      }`,
-      {
-        variables: {
-          inventoryItemId,
-          locationId: primary.id,
-        },
-      },
+  for (const location of targets) {
+    await activateInventoryAtLocation(
+      admin,
+      inventoryItemId,
+      location.id,
+      stockedLocationIds,
     );
-    const activateJson = await activateResponse.json();
-    if (activateJson.errors?.length) {
-      throw new Error(
-        activateJson.errors
-          .map((e: { message: string }) => e.message)
-          .join(", "),
-      );
-    }
-    const activateErrors =
-      activateJson.data?.inventoryActivate?.userErrors ?? [];
-    const alreadyActive = activateErrors.some((e: { message?: string }) =>
-      /already.?stocked|already.?activated|already active|not allowed to set available/i.test(
-        e.message ?? "",
-      ),
-    );
-    if (activateErrors.length && !alreadyActive) {
-      throw new Error(
-        activateErrors.map((e: { message: string }) => e.message).join(", "),
-      );
-    }
   }
 
-  // Set absolute quantity ONLY on the shop location (reliable for checkout).
-  const setResponse = await admin.graphql(
-    `#graphql
-    mutation marketplaceSetInventory($input: InventorySetQuantitiesInput!) {
-      inventorySetQuantities(input: $input) {
-        inventoryAdjustmentGroup {
-          changes { name delta quantityAfterChange }
-        }
-        userErrors { field message code }
-      }
-    }`,
-    {
-      variables: {
-        input: {
-          name: "on_hand",
-          reason: "correction",
-          ignoreCompareQuantity: true,
-          quantities: [
-            {
-              inventoryItemId,
-              locationId: primary.id,
-              quantity: qty,
-            },
-          ],
-        },
-      },
-    },
+  await setQuantityAtLocations(
+    admin,
+    inventoryItemId,
+    targets.map((l) => l.id),
+    qty,
   );
-  const setJson = await setResponse.json();
-  if (setJson.errors?.length) {
-    throw new Error(
-      setJson.errors.map((e: { message: string }) => e.message).join(", "),
-    );
-  }
-  const setErrors = setJson.data?.inventorySetQuantities?.userErrors ?? [];
-  if (setErrors.length) {
-    // Fallback: some shops reject on_hand; try available.
-    const fallback = await admin.graphql(
-      `#graphql
-      mutation marketplaceSetInventoryAvailable($input: InventorySetQuantitiesInput!) {
-        inventorySetQuantities(input: $input) {
-          userErrors { field message code }
-        }
-      }`,
-      {
-        variables: {
-          input: {
-            name: "available",
-            reason: "correction",
-            ignoreCompareQuantity: true,
-            quantities: [
-              {
-                inventoryItemId,
-                locationId: primary.id,
-                quantity: qty,
-              },
-            ],
-          },
-        },
-      },
-    );
-    const fallbackJson = await fallback.json();
-    const fallbackErrors =
-      fallbackJson.data?.inventorySetQuantities?.userErrors ?? [];
-    if (fallbackJson.errors?.length || fallbackErrors.length) {
-      throw new Error(
-        [
-          ...setErrors.map((e: { message: string }) => e.message),
-          ...(fallbackJson.errors ?? []).map(
-            (e: { message: string }) => e.message,
-          ),
-          ...fallbackErrors.map((e: { message: string }) => e.message),
-        ].join(", "),
-      );
-    }
-  }
 }
 
 export async function getProductVendorId(
