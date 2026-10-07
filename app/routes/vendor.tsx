@@ -206,6 +206,12 @@ export default function VendorLayout() {
               active={path.startsWith("/vendor/sales")}
               onNavigate={closeMenu}
             />
+            <NavLink
+              to="/vendor/reports"
+              label="Reports"
+              active={path.startsWith("/vendor/reports")}
+              onNavigate={closeMenu}
+            />
             <div className="sx-nav__bottom">
               <Link to="/vendor/logout" onClick={closeMenu}>
                 Log out
