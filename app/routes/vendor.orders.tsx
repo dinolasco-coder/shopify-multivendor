@@ -26,6 +26,18 @@ const CARRIERS = [
   "Other",
 ];
 
+type ShippingAddress = {
+  name: string;
+  phone: string | null;
+  company: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  province: string | null;
+  zip: string | null;
+  country: string | null;
+};
+
 type OrderStatusMap = Record<
   string,
   {
@@ -33,11 +45,40 @@ type OrderStatusMap = Record<
     financial: string;
     adminUrl: string;
     note: string | null;
+    customerName: string;
+    customerAddress: string;
+    shipping: ShippingAddress | null;
     details: Array<{ key: string; value: string }>;
     imagesByLineId: Record<string, string>;
     imagesByTitle: Record<string, string>;
   }
 >;
+
+function formatShippingAddress(
+  address: {
+    address1?: string | null;
+    address2?: string | null;
+    city?: string | null;
+    province?: string | null;
+    zip?: string | null;
+    country?: string | null;
+    company?: string | null;
+  } | null | undefined,
+): string {
+  if (!address) return "";
+  const cityLine = [address.city, address.province, address.zip]
+    .filter(Boolean)
+    .join(", ");
+  return [
+    address.company,
+    address.address1,
+    address.address2,
+    cityLine,
+    address.country,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 async function fetchOrderStatuses(
   admin: {
@@ -62,9 +103,22 @@ async function fetchOrderStatuses(
             order(id: $id) {
               id
               note
+              email
+              phone
               customAttributes { key value }
               displayFulfillmentStatus
               displayFinancialStatus
+              shippingAddress {
+                name
+                phone
+                company
+                address1
+                address2
+                city
+                province
+                zip
+                country
+              }
               lineItems(first: 50) {
                 nodes {
                   id
@@ -111,11 +165,43 @@ async function fetchOrderStatuses(
             key: String(a.key),
             value: String(a.value),
           }));
+        const shipping = order.shippingAddress
+          ? {
+              name: String(order.shippingAddress.name || ""),
+              phone: order.shippingAddress.phone
+                ? String(order.shippingAddress.phone)
+                : null,
+              company: order.shippingAddress.company
+                ? String(order.shippingAddress.company)
+                : null,
+              address1: order.shippingAddress.address1
+                ? String(order.shippingAddress.address1)
+                : null,
+              address2: order.shippingAddress.address2
+                ? String(order.shippingAddress.address2)
+                : null,
+              city: order.shippingAddress.city
+                ? String(order.shippingAddress.city)
+                : null,
+              province: order.shippingAddress.province
+                ? String(order.shippingAddress.province)
+                : null,
+              zip: order.shippingAddress.zip
+                ? String(order.shippingAddress.zip)
+                : null,
+              country: order.shippingAddress.country
+                ? String(order.shippingAddress.country)
+                : null,
+            }
+          : null;
         map[id] = {
           fulfillment: order.displayFulfillmentStatus || "UNFULFILLED",
           financial: order.displayFinancialStatus || "PENDING",
           adminUrl: `https://admin.shopify.com/store/${shopHandle}/orders/${numeric}`,
           note: order.note ? String(order.note) : null,
+          customerName: shipping?.name || "Guest",
+          customerAddress: formatShippingAddress(shipping),
+          shipping,
           details,
           imagesByLineId,
           imagesByTitle,
@@ -392,7 +478,12 @@ export default function VendorOrders() {
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
       const name = (order.shopifyOrderName || order.shopifyOrderId).toLowerCase();
-      return name.includes(q);
+      const customer = (
+        status?.customerName ||
+        status?.customerAddress ||
+        ""
+      ).toLowerCase();
+      return name.includes(q) || customer.includes(q);
     });
   }, [attributions, statuses, tab, query, actionData]);
 
@@ -458,7 +549,7 @@ export default function VendorOrders() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search orders by order id"
+              placeholder="Search by order id or customer"
             />
           </div>
         </div>
@@ -471,6 +562,7 @@ export default function VendorOrders() {
               <thead>
                 <tr>
                   <th>Order</th>
+                  <th>Customer</th>
                   <th>Total</th>
                   <th>Fulfillment</th>
                   <th>Payment</th>
@@ -596,6 +688,25 @@ export default function VendorOrders() {
                             ) : null}
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        <p className="sx-primary">
+                          {status?.customerName || "—"}
+                        </p>
+                        {status?.customerAddress ? (
+                          <p
+                            className="sx-secondary"
+                            style={{
+                              whiteSpace: "pre-line",
+                              maxWidth: 220,
+                            }}
+                          >
+                            {status.customerAddress}
+                          </p>
+                        ) : null}
+                        {status?.shipping?.phone ? (
+                          <p className="sx-secondary">{status.shipping.phone}</p>
+                        ) : null}
                       </td>
                       <td>
                         <p className="sx-primary">

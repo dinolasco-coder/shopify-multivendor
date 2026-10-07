@@ -37,6 +37,7 @@ type ShopifyOrderRow = {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  customerAddress: string;
   /** Lowercased blob for client search (order #, customer, products, vendors). */
   searchText: string;
   total: number;
@@ -74,6 +75,13 @@ async function fetchShopifyOrders(
           shippingAddress {
             name
             phone
+            company
+            address1
+            address2
+            city
+            province
+            zip
+            country
           }
           # fulfillments is a list, not a connection (no nodes)
           fulfillments(first: 5) {
@@ -122,7 +130,17 @@ async function fetchShopifyOrders(
       currentTotalPriceSet?: {
         shopMoney?: { amount?: string; currencyCode?: string };
       };
-      shippingAddress?: { name?: string; phone?: string | null } | null;
+      shippingAddress?: {
+        name?: string;
+        phone?: string | null;
+        company?: string | null;
+        address1?: string | null;
+        address2?: string | null;
+        city?: string | null;
+        province?: string | null;
+        zip?: string | null;
+        country?: string | null;
+      } | null;
       fulfillments?: Array<{
         status?: string;
         trackingInfo?: Array<{ company?: string; number?: string }>;
@@ -165,6 +183,15 @@ async function fetchShopifyOrders(
       const customerName = o.shippingAddress?.name || "Guest";
       const customerEmail = o.email || "";
       const customerPhone = o.phone || o.shippingAddress?.phone || "";
+      const ship = o.shippingAddress;
+      const cityLine = ship
+        ? [ship.city, ship.province, ship.zip].filter(Boolean).join(", ")
+        : "";
+      const customerAddress = ship
+        ? [ship.company, ship.address1, ship.address2, cityLine, ship.country]
+            .filter(Boolean)
+            .join("\n")
+        : "";
       const productBits = lineNodes
         .flatMap((li) => [
           li.name,
@@ -181,6 +208,7 @@ async function fetchShopifyOrders(
         customerName,
         customerEmail,
         customerPhone,
+        customerAddress,
         productBits,
         delivery,
         tracking?.number,
@@ -200,6 +228,7 @@ async function fetchShopifyOrders(
         customerName,
         customerEmail,
         customerPhone,
+        customerAddress,
         searchText,
         total: Number(o.currentTotalPriceSet?.shopMoney?.amount ?? 0),
         currency:
@@ -651,9 +680,20 @@ export default function AdminOrdersPage() {
                       </td>
                       <td>
                         <p className="nx-primary">{order.customerName}</p>
+                        {order.customerAddress ? (
+                          <p
+                            className="nx-secondary"
+                            style={{ whiteSpace: "pre-line", maxWidth: 220 }}
+                          >
+                            {order.customerAddress}
+                          </p>
+                        ) : null}
                         <p className="nx-secondary">
                           {order.customerEmail || "—"}
                         </p>
+                        {order.customerPhone ? (
+                          <p className="nx-secondary">{order.customerPhone}</p>
+                        ) : null}
                       </td>
                       <td>
                         <p className="nx-primary">

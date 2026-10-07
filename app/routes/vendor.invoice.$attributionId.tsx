@@ -79,6 +79,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   let note: string | null = null;
   let details: Array<{ key: string; value: string }> = [];
+  let customerName = "";
+  let customerPhone: string | null = null;
+  let customerAddress = "";
   try {
     const { admin } = await unauthenticated.admin(vendor.shop);
     const response = await admin.graphql(
@@ -87,6 +90,17 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         order(id: $id) {
           note
           customAttributes { key value }
+          shippingAddress {
+            name
+            phone
+            company
+            address1
+            address2
+            city
+            province
+            zip
+            country
+          }
         }
       }`,
       { variables: { id: attribution.shopifyOrderId } },
@@ -102,6 +116,23 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     )
       .filter((a) => a.key && a.value)
       .map((a) => ({ key: String(a.key), value: String(a.value) }));
+    const ship = order?.shippingAddress;
+    if (ship) {
+      customerName = String(ship.name || "");
+      customerPhone = ship.phone ? String(ship.phone) : null;
+      const cityLine = [ship.city, ship.province, ship.zip]
+        .filter(Boolean)
+        .join(", ");
+      customerAddress = [
+        ship.company,
+        ship.address1,
+        ship.address2,
+        cityLine,
+        ship.country,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
   } catch (error) {
     console.error("Failed loading order notes for invoice", error);
   }
@@ -113,12 +144,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     items,
     note,
     details,
+    customerName,
+    customerPhone,
+    customerAddress,
   };
 };
 
 export default function VendorInvoice() {
-  const { vendorName, vendorEmail, attribution, items, note, details } =
-    useLoaderData<typeof loader>();
+  const {
+    vendorName,
+    vendorEmail,
+    attribution,
+    items,
+    note,
+    details,
+    customerName,
+    customerPhone,
+    customerAddress,
+  } = useLoaderData<typeof loader>();
   const sellerNet = attribution.subtotal - attribution.commissionAmount;
 
   return (
@@ -156,6 +199,26 @@ export default function VendorInvoice() {
           <strong>Date:</strong>{" "}
           {new Date(attribution.createdAt).toLocaleString()}
         </p>
+
+        {(customerName || customerAddress) && (
+          <p>
+            <strong>Ship to:</strong>
+            <br />
+            {customerName || "Guest"}
+            {customerPhone ? (
+              <>
+                <br />
+                {customerPhone}
+              </>
+            ) : null}
+            {customerAddress ? (
+              <>
+                <br />
+                <span style={{ whiteSpace: "pre-line" }}>{customerAddress}</span>
+              </>
+            ) : null}
+          </p>
+        )}
 
         {(note || details.length > 0) && (
           <div className="notes">
