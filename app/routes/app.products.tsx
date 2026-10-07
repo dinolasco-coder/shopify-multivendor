@@ -14,6 +14,8 @@ import { useMemo, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
+  fixAllMarketplaceProductsForShipping,
+  fixProductForShippingCheckout,
   getProductDetail,
   listMarketplaceProducts,
   updateVendorProduct,
@@ -55,16 +57,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = String(form.get("intent") || "");
   const productId = String(form.get("productId") || "");
 
-  if (!productId) return { error: "Missing product." };
-
-  const product = await getProductDetail(admin, productId);
-  if (!product?.metafield?.value) {
-    return { error: "Not a marketplace product." };
-  }
-
-  const vendorId = product.metafield.value as string;
-
   try {
+    if (intent === "fix-shipping") {
+      const result = await fixAllMarketplaceProductsForShipping(admin);
+      const extra =
+        result.errors.length > 0
+          ? ` Issues: ${result.errors.slice(0, 3).join(" · ")}`
+          : "";
+      return {
+        ok: true,
+        message: `Fixed shipping/stock for ${result.fixed} seller product${
+          result.fixed === 1 ? "" : "s"
+        }.${extra}`,
+      };
+    }
+
+    if (!productId) return { error: "Missing product." };
+
+    const product = await getProductDetail(admin, productId);
+    if (!product?.metafield?.value) {
+      return { error: "Not a marketplace product." };
+    }
+
+    const vendorId = product.metafield.value as string;
+
+    if (intent === "fix-shipping-one") {
+      const result = await fixProductForShippingCheckout(admin, productId);
+      return {
+        ok: true,
+        message: `Fixed "${result.title}" (qty ${result.quantity}${
+          result.shippingProfile
+            ? `, profile ${result.shippingProfile}`
+            : ""
+        }). Clear cart and try checkout again.`,
+      };
+    }
+
     if (intent === "approve") {
       await updateVendorProduct(admin, {
         productId,
@@ -244,6 +272,19 @@ export default function AdminProductsPage() {
         <div className="nx-products__head">
           <h1 className="nx-products__title">Products</h1>
           <div className="nx-products__actions">
+            <Form method="post">
+              <input type="hidden" name="intent" value="fix-shipping" />
+              <button
+                className="nx-btn"
+                type="submit"
+                disabled={busy}
+                title="Put seller stock on online locations and attach products to the default shipping profile so checkout shows Ship"
+              >
+                {busy && navigation.formData?.get("intent") === "fix-shipping"
+                  ? "Fixing…"
+                  : "Fix shipping for seller products"}
+              </button>
+            </Form>
             <a
               className="nx-btn"
               href={shopifyProductsUrl}
@@ -371,38 +412,69 @@ export default function AdminProductsPage() {
                               {variantCount} variant
                               {variantCount === 1 ? "" : "s"}
                             </p>
-                            {open && isDraft && (
+                            {open && (
                               <div className="nx-row-actions">
                                 <Form method="post">
-                                  <input type="hidden" name="intent" value="approve" />
+                                  <input
+                                    type="hidden"
+                                    name="intent"
+                                    value="fix-shipping-one"
+                                  />
                                   <input
                                     type="hidden"
                                     name="productId"
                                     value={product.id}
                                   />
                                   <button
-                                    className="nx-btn nx-btn--primary"
+                                    className="nx-btn"
                                     type="submit"
                                     disabled={busy}
                                   >
-                                    Approve
+                                    Fix shipping
                                   </button>
                                 </Form>
-                                <Form method="post">
-                                  <input type="hidden" name="intent" value="reject" />
-                                  <input
-                                    type="hidden"
-                                    name="productId"
-                                    value={product.id}
-                                  />
-                                  <button
-                                    className="nx-btn nx-btn--danger"
-                                    type="submit"
-                                    disabled={busy}
-                                  >
-                                    Reject
-                                  </button>
-                                </Form>
+                                {isDraft ? (
+                                  <>
+                                    <Form method="post">
+                                      <input
+                                        type="hidden"
+                                        name="intent"
+                                        value="approve"
+                                      />
+                                      <input
+                                        type="hidden"
+                                        name="productId"
+                                        value={product.id}
+                                      />
+                                      <button
+                                        className="nx-btn nx-btn--primary"
+                                        type="submit"
+                                        disabled={busy}
+                                      >
+                                        Approve
+                                      </button>
+                                    </Form>
+                                    <Form method="post">
+                                      <input
+                                        type="hidden"
+                                        name="intent"
+                                        value="reject"
+                                      />
+                                      <input
+                                        type="hidden"
+                                        name="productId"
+                                        value={product.id}
+                                      />
+                                      <button
+                                        className="nx-btn nx-btn--danger"
+                                        type="submit"
+                                        disabled={busy}
+                                      >
+                                        Reject
+                                      </button>
+                                    </Form>
+                                  </>
+                                ) : null}
                               </div>
                             )}
                           </div>

@@ -95,7 +95,7 @@ export async function createVendorProduct(
             {
               id: variant.id,
               price: input.price,
-              inventoryItem: { tracked: true },
+              inventoryItem: { tracked: true, requiresShipping: true },
             },
           ],
         },
@@ -137,6 +137,8 @@ export async function createVendorProduct(
         input.inventoryQuantity,
       );
     }
+
+    await associateVariantWithDefaultShippingProfile(admin, variant.id);
   }
 
   if (input.images?.length) {
@@ -938,7 +940,8 @@ async function setInventoryQuantity(
     {
       variables: {
         id: inventoryItemId,
-        input: { tracked: true },
+        // Physical products must require shipping or checkout may hide Ship.
+        input: { tracked: true, requiresShipping: true },
       },
     },
   );
@@ -966,6 +969,169 @@ async function setInventoryQuantity(
     targets.map((l) => l.id),
     qty,
   );
+}
+
+/**
+ * Put seller variants on the shop's default shipping profile so checkout
+ * can show Ship (not only Pickup). Requires read_shipping + write_shipping.
+ * Soft-fails if scopes are missing.
+ */
+export async function associateVariantWithDefaultShippingProfile(
+  admin: AdminGraphql,
+  variantId: string,
+): Promise<{ ok: boolean; profileName?: string; error?: string }> {
+  try {
+    const profilesResponse = await admin.graphql(
+      `#graphql
+      query marketplaceDeliveryProfiles {
+        deliveryProfiles(first: 20) {
+          nodes {
+            id
+            name
+            default
+          }
+        }
+      }`,
+    );
+    const profilesJson = await profilesResponse.json();
+    if (profilesJson.errors?.length) {
+      return {
+        ok: false,
+        error: profilesJson.errors
+          .map((e: { message: string }) => e.message)
+          .join(", "),
+      };
+    }
+    const nodes: Array<{ id: string; name?: string; default?: boolean }> =
+      profilesJson.data?.deliveryProfiles?.nodes ?? [];
+    const profile =
+      nodes.find((p) => p.default) ||
+      nodes.find((p) => /general/i.test(p.name || "")) ||
+      nodes[0];
+    if (!profile?.id) {
+      return { ok: false, error: "No shipping profile found." };
+    }
+
+    const updateResponse = await admin.graphql(
+      `#graphql
+      mutation marketplaceAssociateShippingProfile(
+        $id: ID!
+        $profile: DeliveryProfileInput!
+      ) {
+        deliveryProfileUpdate(id: $id, profile: $profile) {
+          profile { id name }
+          userErrors { field message }
+        }
+      }`,
+      {
+        variables: {
+          id: profile.id,
+          profile: { variantsToAssociate: [variantId] },
+        },
+      },
+    );
+    const updateJson = await updateResponse.json();
+    if (updateJson.errors?.length) {
+      return {
+        ok: false,
+        error: updateJson.errors
+          .map((e: { message: string }) => e.message)
+          .join(", "),
+      };
+    }
+    const userErrors =
+      updateJson.data?.deliveryProfileUpdate?.userErrors ?? [];
+    if (userErrors.length) {
+      return {
+        ok: false,
+        error: userErrors.map((e: { message: string }) => e.message).join(", "),
+      };
+    }
+    return {
+      ok: true,
+      profileName:
+        updateJson.data?.deliveryProfileUpdate?.profile?.name || profile.name,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Repair a marketplace product for Ship checkout:
+ * stock on online locations + requires shipping + default shipping profile.
+ */
+export async function fixProductForShippingCheckout(
+  admin: AdminGraphql,
+  productId: string,
+): Promise<{ title: string; quantity: number; shippingProfile?: string }> {
+  const product = await getProductDetail(admin, productId);
+  if (!product) throw new Error("Product not found.");
+
+  const variant = product.variants?.nodes?.[0];
+  const inventoryItemId = variant?.inventoryItem?.id;
+  if (!variant?.id || !inventoryItemId) {
+    throw new Error(`"${product.title}" has no inventory item.`);
+  }
+
+  const quantity = Math.max(
+    0,
+    Math.floor(Number(variant.inventoryQuantity ?? product.totalInventory ?? 0)),
+  );
+  // Keep at least current stock; if Shopify reports 0 but UI had stock elsewhere,
+  // setInventoryQuantity still activates online locations.
+  await setInventoryQuantity(admin, inventoryItemId, quantity || 0);
+
+  const profileResult = await associateVariantWithDefaultShippingProfile(
+    admin,
+    variant.id,
+  );
+
+  return {
+    title: product.title,
+    quantity,
+    shippingProfile: profileResult.ok
+      ? profileResult.profileName
+      : undefined,
+  };
+}
+
+export async function fixAllMarketplaceProductsForShipping(
+  admin: AdminGraphql,
+): Promise<{ fixed: number; skipped: number; errors: string[] }> {
+  const products = (
+    (await listMarketplaceProducts(admin, { first: 100 })) as Array<{
+      id?: string;
+      title?: string;
+      metafield?: { value?: string } | null;
+    }>
+  ).filter((p) => p.metafield?.value);
+  let fixed = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const product of products) {
+    if (!product.id) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      await fixProductForShippingCheckout(admin, product.id);
+      fixed += 1;
+    } catch (error) {
+      skipped += 1;
+      errors.push(
+        `${product.title || product.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  return { fixed, skipped, errors };
 }
 
 export async function getProductVendorId(
@@ -1057,6 +1223,7 @@ export async function getProductDetail(admin: AdminGraphql, productId: string) {
         ) {
           value
         }
+        totalInventory
         variants(first: 1) {
           nodes {
             id
