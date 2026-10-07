@@ -31,6 +31,7 @@ export default function VendorReportsPage() {
   const { report } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const period = parseReportPeriod(searchParams.get("period"));
+  const maxSales = Math.max(1, ...report.series.map((p) => p.sales));
 
   function setPeriod(next: string) {
     const params = new URLSearchParams(searchParams);
@@ -40,7 +41,7 @@ export default function VendorReportsPage() {
 
   return (
     <div>
-      <h1 className="sx-title">Reports</h1>
+      <h1 className="sx-title">Analytics</h1>
       <p className="sx-sub">{report.rangeLabel}</p>
 
       <div className="sx-tabs" style={{ marginBottom: 16 }}>
@@ -56,48 +57,94 @@ export default function VendorReportsPage() {
         ))}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 12,
-        }}
-      >
-        <div className="sx-panel">
-          <p className="sx-metric__label">Revenue</p>
+      <div className="sx-metrics">
+        <div className="sx-metric">
+          <p className="sx-metric__label">Total sales</p>
           <p className="sx-metric__value">
             {formatMoney(report.revenue, report.currency)}
           </p>
-          <p className="sx-secondary" style={{ marginTop: 6 }}>
-            {report.orderCount} order{report.orderCount === 1 ? "" : "s"}
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Orders</p>
+          <p className="sx-metric__value">{report.orderCount}</p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Average order value</p>
+          <p className="sx-metric__value">
+            {formatMoney(report.averageOrderValue, report.currency)}
           </p>
         </div>
-        <div className="sx-panel">
+        <div className="sx-metric">
           <p className="sx-metric__label">Customers</p>
           <p className="sx-metric__value">{report.customers}</p>
-          <p className="sx-secondary" style={{ marginTop: 6 }}>
-            Unique buyers this period
-          </p>
-        </div>
-        <div className="sx-panel">
-          <p className="sx-metric__label">Products</p>
-          <p className="sx-metric__value">{report.productsActive}</p>
-          <p className="sx-secondary" style={{ marginTop: 6 }}>
-            Active products
-          </p>
-        </div>
-        <div className="sx-panel">
-          <p className="sx-metric__label">Inventory</p>
-          <p className="sx-metric__value">{report.inventoryUnits}</p>
-          <p className="sx-secondary" style={{ marginTop: 6 }}>
-            Units in stock
-          </p>
         </div>
       </div>
 
-      <div className="sx-banner info" style={{ marginTop: 16 }}>
-        Switch Daily / Weekly / Monthly / Yearly to update revenue, orders, and
-        customers. Product and inventory counts are your current catalog.
+      <div className="sx-metrics">
+        <div className="sx-metric">
+          <p className="sx-metric__label">Products</p>
+          <p className="sx-metric__value">{report.productsActive}</p>
+        </div>
+        <div className="sx-metric">
+          <p className="sx-metric__label">Inventory</p>
+          <p className="sx-metric__value">{report.inventoryUnits}</p>
+        </div>
+      </div>
+
+      <div className="sx-panel" style={{ marginTop: 4 }}>
+        <h2 className="sx-panel__title">Sales over time</h2>
+        {report.series.length === 0 ? (
+          <p className="sx-secondary">No sales in this period.</p>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 6,
+              height: 160,
+              marginTop: 12,
+            }}
+          >
+            {report.series.map((point) => (
+              <div
+                key={point.label}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  title={formatMoney(point.sales, report.currency)}
+                  style={{
+                    width: "100%",
+                    maxWidth: 32,
+                    borderRadius: "6px 6px 2px 2px",
+                    background: "#2c6ecb",
+                    height: `${Math.max(4, (point.sales / maxSales) * 100)}%`,
+                  }}
+                />
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 10,
+                    color: "#6d7175",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: "100%",
+                  }}
+                >
+                  {point.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

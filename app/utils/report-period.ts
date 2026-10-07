@@ -1,10 +1,11 @@
 export type ReportPeriod = "daily" | "weekly" | "monthly" | "yearly";
 
+/** Labels aligned with Shopify Admin analytics ranges. */
 export const REPORT_PERIODS: Array<{ id: ReportPeriod; label: string }> = [
-  { id: "daily", label: "Daily" },
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-  { id: "yearly", label: "Yearly" },
+  { id: "daily", label: "Today" },
+  { id: "weekly", label: "Last 7 days" },
+  { id: "monthly", label: "Last 30 days" },
+  { id: "yearly", label: "Last 12 months" },
 ];
 
 export function parseReportPeriod(value: string | null | undefined): ReportPeriod {
@@ -13,7 +14,7 @@ export function parseReportPeriod(value: string | null | undefined): ReportPerio
   return "daily";
 }
 
-/** Inclusive start / exclusive end for the selected period (local shop time ≈ server local). */
+/** Inclusive start / end for DB attribution fallbacks. */
 export function getReportPeriodRange(
   period: ReportPeriod,
   now = new Date(),
@@ -24,15 +25,13 @@ export function getReportPeriodRange(
   if (period === "daily") {
     start.setHours(0, 0, 0, 0);
   } else if (period === "weekly") {
-    const day = start.getDay(); // 0 Sun … 6 Sat
-    const mondayOffset = day === 0 ? -6 : 1 - day;
-    start.setDate(start.getDate() + mondayOffset);
+    start.setDate(start.getDate() - 6);
     start.setHours(0, 0, 0, 0);
   } else if (period === "monthly") {
-    start.setDate(1);
+    start.setDate(start.getDate() - 29);
     start.setHours(0, 0, 0, 0);
   } else {
-    start.setMonth(0, 1);
+    start.setFullYear(start.getFullYear() - 1);
     start.setHours(0, 0, 0, 0);
   }
 
@@ -48,6 +47,24 @@ export function getReportPeriodRange(
       : `${fmt.format(start)} – ${fmt.format(end)}`;
 
   return { start, end, label };
+}
+
+/** ShopifyQL time window + timeseries grain (Shopify Admin–style). */
+export function shopifyqlPeriodClause(period: ReportPeriod): {
+  since: string;
+  timeseries: "hour" | "day" | "month";
+  label: string;
+} {
+  if (period === "daily") {
+    return { since: "DURING today", timeseries: "hour", label: "Today" };
+  }
+  if (period === "weekly") {
+    return { since: "SINCE -7d", timeseries: "day", label: "Last 7 days" };
+  }
+  if (period === "monthly") {
+    return { since: "SINCE -30d", timeseries: "day", label: "Last 30 days" };
+  }
+  return { since: "SINCE -12m", timeseries: "month", label: "Last 12 months" };
 }
 
 /** Shopify search syntax for created_at windows. */

@@ -208,7 +208,7 @@ export default function VendorLayout() {
             />
             <NavLink
               to="/vendor/reports"
-              label="Reports"
+              label="Analytics"
               active={path.startsWith("/vendor/reports")}
               onNavigate={closeMenu}
             />

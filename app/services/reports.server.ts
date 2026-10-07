@@ -1,9 +1,10 @@
 import prisma from "../db.server";
 import { listMarketplaceProducts } from "./products.server";
 import {
-  shopifyCreatedAtQuery,
-  type ReportPeriod,
   getReportPeriodRange,
+  shopifyCreatedAtQuery,
+  shopifyqlPeriodClause,
+  type ReportPeriod,
 } from "../utils/report-period";
 
 type AdminGraphql = {
@@ -13,200 +14,362 @@ type AdminGraphql = {
   ) => Promise<Response>;
 };
 
-export type ReportMetrics = {
+export type AnalyticsPoint = {
+  label: string;
+  sales: number;
+  orders: number;
+};
+
+export type TopProductRow = {
+  title: string;
+  netSales: number;
+};
+
+export type ShopAnalytics = {
   period: ReportPeriod;
   rangeLabel: string;
-  startIso: string;
-  endIso: string;
-  revenue: number;
   currency: string;
-  orderCount: number;
+  source: "shopifyql" | "fallback";
+  error: string | null;
+  totalSales: number;
+  previousTotalSales: number;
+  salesChangePercent: number | null;
+  orders: number;
+  previousOrders: number;
+  averageOrderValue: number;
   customers: number;
+  returningCustomerRate: number | null;
+  marketplaceRevenue: number;
   productsNew: number;
   productsActive: number;
   inventoryUnits: number;
-  marketplaceRevenue: number;
+  series: AnalyticsPoint[];
+  topProducts: TopProductRow[];
 };
 
-async function fetchShopifyPeriodOrders(
+function money(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function pctChange(current: number, previous: number): number | null {
+  if (!previous) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function formatSeriesLabel(raw: unknown, grain: "hour" | "day" | "month") {
+  const s = String(raw || "");
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  if (grain === "hour") {
+    return new Intl.DateTimeFormat("en-US", { hour: "numeric" }).format(d);
+  }
+  if (grain === "month") {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      year: "2-digit",
+    }).format(d);
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(d);
+}
+
+async function runShopifyql(admin: AdminGraphql, query: string) {
+  const response = await admin.graphql(
+    `#graphql
+    query marketplaceShopifyql($query: String!) {
+      shop { currencyCode }
+      shopifyqlQuery(query: $query) {
+        tableData {
+          columns { name dataType displayName }
+          rows
+        }
+        parseErrors
+      }
+    }`,
+    { variables: { query } },
+  );
+  const json = await response.json();
+  const gqlErrors = (json.errors ?? []) as Array<{ message?: string }>;
+  if (gqlErrors.length) {
+    throw new Error(gqlErrors.map((e) => e.message || "ShopifyQL error").join(", "));
+  }
+  const payload = json.data?.shopifyqlQuery;
+  const parseErrors = (payload?.parseErrors ?? []) as string[];
+  if (parseErrors.length) {
+    throw new Error(parseErrors.join(", "));
+  }
+  return {
+    currency: (json.data?.shop?.currencyCode as string) || "PHP",
+    rows: (payload?.tableData?.rows ?? []) as Array<Record<string, unknown>>,
+  };
+}
+
+async function marketplaceSnapshot(admin: AdminGraphql, shop: string, period: ReportPeriod) {
+  const { start, end } = getReportPeriodRange(period);
+  const [products, market] = await Promise.all([
+    listMarketplaceProducts(admin, { first: 100 }).catch(() => []),
+    prisma.orderAttribution
+      .findMany({
+        where: { shop, createdAt: { gte: start, lte: end } },
+        select: { subtotal: true, currency: true },
+      })
+      .catch(() => [] as Array<{ subtotal: number; currency: string }>),
+  ]);
+
+  let inventoryUnits = 0;
+  let productsActive = 0;
+  for (const p of products as Array<{
+    status?: string;
+    totalInventory?: number | null;
+  }>) {
+    inventoryUnits += Math.max(0, Number(p.totalInventory ?? 0));
+    if (String(p.status || "").toUpperCase() === "ACTIVE") productsActive += 1;
+  }
+
+  const productQuery = shopifyCreatedAtQuery(start, end);
+  let productsNew = 0;
+  try {
+    const response = await admin.graphql(
+      `#graphql
+      query marketplaceReportProducts($query: String) {
+        productsCount(query: $query) { count }
+      }`,
+      { variables: { query: productQuery } },
+    );
+    const json = await response.json();
+    productsNew = Number(json.data?.productsCount?.count ?? 0);
+  } catch {
+    productsNew = 0;
+  }
+
+  return {
+    inventoryUnits,
+    productsActive,
+    productsNew,
+    marketplaceRevenue: market.reduce((s, r) => s + r.subtotal, 0),
+    currency: market[0]?.currency ?? "PHP",
+  };
+}
+
+async function buildShopifyqlAnalytics(
   admin: AdminGraphql,
-  start: Date,
-  end: Date,
-): Promise<{
-  revenue: number;
-  currency: string;
-  orderCount: number;
-  customers: number;
-}> {
+  period: ReportPeriod,
+): Promise<Omit<ShopAnalytics, "marketplaceRevenue" | "productsNew" | "productsActive" | "inventoryUnits">> {
+  const { since, timeseries, label } = shopifyqlPeriodClause(period);
+
+  const salesQuery = [
+    "FROM sales",
+    "SHOW total_sales, orders, average_order_value",
+    `TIMESERIES ${timeseries}`,
+    since,
+    "COMPARE TO previous_period",
+    "WITH TOTALS",
+    `ORDER BY ${timeseries} ASC`,
+  ].join(" ");
+
+  const topQuery = [
+    "FROM sales",
+    "SHOW net_sales",
+    "GROUP BY TOP 5 product_title",
+    since,
+    "ORDER BY net_sales DESC",
+  ].join(" ");
+
+  const customersQuery = [
+    "FROM sales",
+    "SHOW customers, returning_customers",
+    since,
+    "WITH TOTALS",
+  ].join(" ");
+
+  const [sales, top, customers] = await Promise.all([
+    runShopifyql(admin, salesQuery),
+    runShopifyql(admin, topQuery).catch(() => ({ currency: "PHP", rows: [] })),
+    runShopifyql(admin, customersQuery).catch(() => ({
+      currency: "PHP",
+      rows: [],
+    })),
+  ]);
+
+  const first = sales.rows[0] || {};
+  const totalSales = money(first.total_sales__totals ?? first.total_sales);
+  const previousTotalSales = money(
+    first.comparison_total_sales__previous_period__totals ??
+      first.comparison_total_sales__previous_period,
+  );
+  const orders = money(first.orders__totals ?? first.orders);
+  const previousOrders = money(
+    first.comparison_orders__previous_period__totals ??
+      first.comparison_orders__previous_period,
+  );
+  const averageOrderValue = money(
+    first.average_order_value__totals ?? first.average_order_value,
+  );
+
+  const series: AnalyticsPoint[] = sales.rows
+    .filter((row) => row[timeseries] != null)
+    .map((row) => ({
+      label: formatSeriesLabel(row[timeseries], timeseries),
+      sales: money(row.total_sales),
+      orders: money(row.orders),
+    }));
+
+  const topProducts: TopProductRow[] = top.rows
+    .filter((row) => row.product_title)
+    .map((row) => ({
+      title: String(row.product_title),
+      netSales: money(row.net_sales),
+    }));
+
+  const custRow = customers.rows[0] || {};
+  const customersCount = money(
+    custRow.customers__totals ?? custRow.customers,
+  );
+  const returning = money(
+    custRow.returning_customers__totals ?? custRow.returning_customers,
+  );
+  const returningCustomerRate =
+    customersCount > 0 ? (returning / customersCount) * 100 : null;
+
+  return {
+    period,
+    rangeLabel: label,
+    currency: sales.currency,
+    source: "shopifyql",
+    error: null,
+    totalSales,
+    previousTotalSales,
+    salesChangePercent: pctChange(totalSales, previousTotalSales),
+    orders,
+    previousOrders,
+    averageOrderValue,
+    customers: customersCount,
+    returningCustomerRate,
+    series,
+    topProducts,
+  };
+}
+
+async function buildFallbackAnalytics(
+  admin: AdminGraphql,
+  shop: string,
+  period: ReportPeriod,
+  reason: string,
+): Promise<ShopAnalytics> {
+  const { start, end, label } = getReportPeriodRange(period);
   const query = `${shopifyCreatedAtQuery(start, end)} status:any`;
   const response = await admin.graphql(
     `#graphql
-    query marketplaceReportOrders($first: Int!, $query: String) {
+    query marketplaceFallbackAnalytics($first: Int!, $query: String) {
+      shop { currencyCode }
       ordersCount(query: $query) { count }
       orders(first: $first, query: $query, sortKey: CREATED_AT, reverse: true) {
         nodes {
-          id
           email
           cancelledAt
-          currentTotalPriceSet {
-            shopMoney { amount currencyCode }
-          }
+          createdAt
+          currentTotalPriceSet { shopMoney { amount currencyCode } }
         }
       }
     }`,
     { variables: { first: 100, query } },
   );
   const json = await response.json();
-  if (json.errors?.length) {
-    throw new Error(
-      json.errors.map((e: { message: string }) => e.message).join(", "),
-    );
-  }
-
   const nodes = (json.data?.orders?.nodes ?? []) as Array<{
     email?: string | null;
     cancelledAt?: string | null;
+    createdAt?: string;
     currentTotalPriceSet?: {
       shopMoney?: { amount?: string; currencyCode?: string };
     };
   }>;
 
-  let revenue = 0;
-  let currency = "PHP";
+  let totalSales = 0;
   const emails = new Set<string>();
+  const byDay = new Map<string, { sales: number; orders: number }>();
   for (const order of nodes) {
     if (order.cancelledAt) continue;
-    revenue += Number(order.currentTotalPriceSet?.shopMoney?.amount ?? 0);
-    currency =
-      order.currentTotalPriceSet?.shopMoney?.currencyCode || currency;
+    const amount = money(order.currentTotalPriceSet?.shopMoney?.amount);
+    totalSales += amount;
     const email = String(order.email || "")
       .trim()
       .toLowerCase();
     if (email) emails.add(email);
+    const dayKey = (order.createdAt || "").slice(0, 10) || "unknown";
+    const bucket = byDay.get(dayKey) || { sales: 0, orders: 0 };
+    bucket.sales += amount;
+    bucket.orders += 1;
+    byDay.set(dayKey, bucket);
   }
 
-  return {
-    revenue,
-    currency,
-    orderCount: Number(json.data?.ordersCount?.count ?? nodes.length),
-    customers: emails.size,
-  };
-}
-
-async function fetchProductsCreatedCount(
-  admin: AdminGraphql,
-  start: Date,
-  end: Date,
-) {
-  const query = shopifyCreatedAtQuery(start, end);
-  const response = await admin.graphql(
-    `#graphql
-    query marketplaceReportProducts($query: String) {
-      productsCount(query: $query) { count }
-      activeProductsCount: productsCount(query: "status:active") { count }
-    }`,
-    { variables: { query } },
-  );
-  const json = await response.json();
-  return {
-    productsNew: Number(json.data?.productsCount?.count ?? 0),
-    productsActive: Number(json.data?.activeProductsCount?.count ?? 0),
-  };
-}
-
-async function marketplaceInventory(
-  admin: AdminGraphql,
-  vendorId?: string,
-): Promise<{ inventoryUnits: number; productsActive: number }> {
-  const products = (await listMarketplaceProducts(admin, {
-    vendorId,
-    first: 100,
-  })) as Array<{
-    status?: string;
-    totalInventory?: number | null;
-    metafield?: { value?: string } | null;
-  }>;
-
-  let inventoryUnits = 0;
-  let productsActive = 0;
-  for (const p of products) {
-    inventoryUnits += Math.max(0, Number(p.totalInventory ?? 0));
-    if (String(p.status || "").toUpperCase() === "ACTIVE") productsActive += 1;
-  }
-  return { inventoryUnits, productsActive };
-}
-
-async function marketplaceRevenueInRange(
-  shop: string,
-  start: Date,
-  end: Date,
-  vendorId?: string,
-) {
-  const rows = await prisma.orderAttribution.findMany({
-    where: {
-      shop,
-      ...(vendorId ? { vendorId } : {}),
-      createdAt: { gte: start, lte: end },
-    },
-    select: { subtotal: true, currency: true, shopifyOrderId: true },
-  });
-  const revenue = rows.reduce((sum, r) => sum + r.subtotal, 0);
-  return {
-    marketplaceRevenue: revenue,
-    currency: rows[0]?.currency ?? "PHP",
-    attributionOrders: new Set(rows.map((r) => r.shopifyOrderId)).size,
-  };
-}
-
-export async function buildShopReport(
-  admin: AdminGraphql,
-  shop: string,
-  period: ReportPeriod,
-): Promise<ReportMetrics> {
-  const { start, end, label } = getReportPeriodRange(period);
-
-  const [orders, products, inventory, market] = await Promise.all([
-    fetchShopifyPeriodOrders(admin, start, end).catch(() => ({
-      revenue: 0,
-      currency: "PHP",
-      orderCount: 0,
-      customers: 0,
-    })),
-    fetchProductsCreatedCount(admin, start, end).catch(() => ({
-      productsNew: 0,
-      productsActive: 0,
-    })),
-    marketplaceInventory(admin).catch(() => ({
-      inventoryUnits: 0,
-      productsActive: 0,
-    })),
-    marketplaceRevenueInRange(shop, start, end),
-  ]);
+  const orders = Number(json.data?.ordersCount?.count ?? nodes.length);
+  const snapshot = await marketplaceSnapshot(admin, shop, period);
 
   return {
     period,
     rangeLabel: label,
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
-    revenue: orders.revenue,
-    currency: orders.currency || market.currency,
-    orderCount: orders.orderCount,
-    customers: orders.customers,
-    productsNew: products.productsNew,
-    productsActive: Math.max(products.productsActive, inventory.productsActive),
-    inventoryUnits: inventory.inventoryUnits,
-    marketplaceRevenue: market.marketplaceRevenue,
+    currency:
+      (json.data?.shop?.currencyCode as string) || snapshot.currency || "PHP",
+    source: "fallback",
+    error: reason,
+    totalSales,
+    previousTotalSales: 0,
+    salesChangePercent: null,
+    orders,
+    previousOrders: 0,
+    averageOrderValue: orders > 0 ? totalSales / orders : 0,
+    customers: emails.size,
+    returningCustomerRate: null,
+    marketplaceRevenue: snapshot.marketplaceRevenue,
+    productsNew: snapshot.productsNew,
+    productsActive: snapshot.productsActive,
+    inventoryUnits: snapshot.inventoryUnits,
+    series: [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, v]) => ({
+        label: formatSeriesLabel(day, "day"),
+        sales: v.sales,
+        orders: v.orders,
+      })),
+    topProducts: [],
   };
 }
 
+export async function buildShopAnalytics(
+  admin: AdminGraphql,
+  shop: string,
+  period: ReportPeriod,
+): Promise<ShopAnalytics> {
+  const snapshot = await marketplaceSnapshot(admin, shop, period);
+
+  try {
+    const analytics = await buildShopifyqlAnalytics(admin, period);
+    return {
+      ...analytics,
+      marketplaceRevenue: snapshot.marketplaceRevenue,
+      productsNew: snapshot.productsNew,
+      productsActive: snapshot.productsActive,
+      inventoryUnits: snapshot.inventoryUnits,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Shopify analytics unavailable.";
+    console.error("ShopifyQL analytics failed, using fallback", error);
+    return buildFallbackAnalytics(admin, shop, period, message);
+  }
+}
+
+/** Seller report (attribution-based; ShopifyQL is store-wide). */
 export async function buildVendorReport(
   admin: AdminGraphql,
   shop: string,
   vendorId: string,
   period: ReportPeriod,
-): Promise<ReportMetrics> {
+) {
   const { start, end, label } = getReportPeriodRange(period);
-
   const attributions = await prisma.orderAttribution.findMany({
     where: {
       vendorId,
@@ -216,14 +379,14 @@ export async function buildVendorReport(
       subtotal: true,
       currency: true,
       shopifyOrderId: true,
+      createdAt: true,
     },
   });
 
-  const marketplaceRevenue = attributions.reduce((s, r) => s + r.subtotal, 0);
+  const revenue = attributions.reduce((s, r) => s + r.subtotal, 0);
   const orderIds = [...new Set(attributions.map((a) => a.shopifyOrderId))];
   const currency = attributions[0]?.currency ?? "PHP";
 
-  // Unique customers from this seller's orders in the period.
   const emails = new Set<string>();
   await Promise.all(
     orderIds.slice(0, 40).map(async (id) => {
@@ -231,10 +394,7 @@ export async function buildVendorReport(
         const response = await admin.graphql(
           `#graphql
           query vendorReportOrderEmail($id: ID!) {
-            order(id: $id) {
-              email
-              cancelledAt
-            }
+            order(id: $id) { email cancelledAt }
           }`,
           { variables: { id } },
         );
@@ -246,32 +406,75 @@ export async function buildVendorReport(
           .toLowerCase();
         if (email) emails.add(email);
       } catch {
-        // ignore single-order failures
+        // ignore
       }
     }),
   );
 
-  const inventory = await marketplaceInventory(admin, vendorId).catch(() => ({
-    inventoryUnits: 0,
-    productsActive: 0,
-  }));
+  const products = (await listMarketplaceProducts(admin, {
+    vendorId,
+    first: 100,
+  }).catch(() => [])) as Array<{
+    status?: string;
+    totalInventory?: number | null;
+  }>;
 
-  // Seller "new products" ≈ active marketplace products they own (Shopify
-  // product created_at isn't vendor-filtered easily without metafield search).
-  const productsNew = inventory.productsActive;
+  let inventoryUnits = 0;
+  let productsActive = 0;
+  for (const p of products) {
+    inventoryUnits += Math.max(0, Number(p.totalInventory ?? 0));
+    if (String(p.status || "").toUpperCase() === "ACTIVE") productsActive += 1;
+  }
+
+  const byDay = new Map<string, number>();
+  for (const row of attributions) {
+    const key = row.createdAt.toISOString().slice(0, 10);
+    byDay.set(key, (byDay.get(key) || 0) + row.subtotal);
+  }
 
   return {
     period,
     rangeLabel: label,
     startIso: start.toISOString(),
     endIso: end.toISOString(),
-    revenue: marketplaceRevenue,
+    revenue,
     currency,
     orderCount: orderIds.length,
     customers: emails.size,
-    productsNew,
-    productsActive: inventory.productsActive,
-    inventoryUnits: inventory.inventoryUnits,
-    marketplaceRevenue,
+    averageOrderValue: orderIds.length ? revenue / orderIds.length : 0,
+    productsNew: productsActive,
+    productsActive,
+    inventoryUnits,
+    marketplaceRevenue: revenue,
+    series: [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, sales]) => ({
+        label: formatSeriesLabel(day, "day"),
+        sales,
+        orders: 0,
+      })),
+  };
+}
+
+/** @deprecated use buildShopAnalytics */
+export async function buildShopReport(
+  admin: AdminGraphql,
+  shop: string,
+  period: ReportPeriod,
+) {
+  const a = await buildShopAnalytics(admin, shop, period);
+  return {
+    period: a.period,
+    rangeLabel: a.rangeLabel,
+    startIso: "",
+    endIso: "",
+    revenue: a.totalSales,
+    currency: a.currency,
+    orderCount: a.orders,
+    customers: a.customers,
+    productsNew: a.productsNew,
+    productsActive: a.productsActive,
+    inventoryUnits: a.inventoryUnits,
+    marketplaceRevenue: a.marketplaceRevenue,
   };
 }
