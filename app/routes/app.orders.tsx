@@ -513,17 +513,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const orderId = String(form.get("orderId") || "").trim();
     const orderName = String(form.get("orderName") || "").trim();
     const reason = String(form.get("reason") || "OTHER") as OrderCancelReason;
-    const restock = form.get("restock") === "on" || form.get("restock") === "true";
-    const refund = form.get("refund") === "on" || form.get("refund") === "true";
-    const notifyCustomer =
-      form.get("notifyCustomer") === "on" ||
-      form.get("notifyCustomer") === "true";
+    // Hidden+checkbox pattern: values include "true" when checked.
+    const restock = form.getAll("restock").map(String).includes("true");
+    const refund = form.getAll("refund").map(String).includes("true");
+    const notifyCustomer = form
+      .getAll("notifyCustomer")
+      .map(String)
+      .includes("true");
     const staffNote = String(form.get("staffNote") || "").trim();
 
     if (!orderId) return { error: "Missing order." };
 
     try {
-      await cancelShopifyOrder(admin, {
+      const result = await cancelShopifyOrder(admin, {
         orderId,
         reason,
         restock,
@@ -531,9 +533,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         notifyCustomer,
         staffNote: staffNote || `Cancelled from Multivendor Admin`,
       });
+      const label = orderName || result.orderName || "order";
+      if (notifyCustomer && result.notified) {
+        return {
+          ok: true,
+          message: `Cancelled ${label}. Shopify emailed ${result.customerEmail}.`,
+        };
+      }
+      if (notifyCustomer && !result.customerEmail) {
+        return {
+          ok: true,
+          message: `Cancelled ${label}, but this order has no customer email so Shopify could not send a notification.`,
+        };
+      }
       return {
         ok: true,
-        message: `Cancelled ${orderName || "order"}. Refund and restock may take a moment in Shopify.`,
+        message: `Cancelled ${label}. Customer email was not sent.`,
       };
     } catch (error) {
       console.error("Admin cancel order failed", error);
@@ -803,10 +818,18 @@ export default function AdminOrdersPage() {
                                   </option>
                                 ))}
                               </select>
+                              <input type="hidden" name="refund" value="false" />
+                              <input type="hidden" name="restock" value="false" />
+                              <input
+                                type="hidden"
+                                name="notifyCustomer"
+                                value="false"
+                              />
                               <label>
                                 <input
                                   type="checkbox"
                                   name="refund"
+                                  value="true"
                                   defaultChecked
                                 />
                                 Refund payment
@@ -815,6 +838,7 @@ export default function AdminOrdersPage() {
                                 <input
                                   type="checkbox"
                                   name="restock"
+                                  value="true"
                                   defaultChecked
                                 />
                                 Restock items
@@ -823,6 +847,7 @@ export default function AdminOrdersPage() {
                                 <input
                                   type="checkbox"
                                   name="notifyCustomer"
+                                  value="true"
                                   defaultChecked
                                 />
                                 Email customer

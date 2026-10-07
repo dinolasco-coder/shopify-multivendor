@@ -27,6 +27,47 @@ export async function cancelShopifyOrder(
   const reason = ORDER_CANCEL_REASONS.some((r) => r.value === input.reason)
     ? input.reason
     : "OTHER";
+  const restock = input.restock !== false;
+  const refund = input.refund !== false;
+  // Default ON — cancellation email should go out unless explicitly disabled.
+  const notifyCustomer = input.notifyCustomer !== false;
+
+  const orderLookup = await admin.graphql(
+    `#graphql
+    query marketplaceOrderEmail($id: ID!) {
+      order(id: $id) {
+        id
+        name
+        email
+        cancelledAt
+      }
+    }`,
+    { variables: { id: input.orderId } },
+  );
+  const orderJson = await orderLookup.json();
+  if (orderJson.errors?.length) {
+    throw new Error(
+      orderJson.errors.map((e: { message: string }) => e.message).join(", "),
+    );
+  }
+  const order = orderJson.data?.order as
+    | {
+        id?: string;
+        name?: string;
+        email?: string | null;
+        cancelledAt?: string | null;
+      }
+    | null
+    | undefined;
+
+  if (!order?.id) {
+    throw new Error("Order not found.");
+  }
+  if (order.cancelledAt) {
+    throw new Error("This order is already cancelled.");
+  }
+
+  const customerEmail = String(order.email || "").trim();
 
   const response = await admin.graphql(
     `#graphql
@@ -34,7 +75,7 @@ export async function cancelShopifyOrder(
       $orderId: ID!
       $reason: OrderCancelReason!
       $restock: Boolean!
-      $notifyCustomer: Boolean
+      $notifyCustomer: Boolean!
       $refundMethod: OrderCancelRefundMethodInput!
       $staffNote: String
     ) {
@@ -55,10 +96,10 @@ export async function cancelShopifyOrder(
       variables: {
         orderId: input.orderId,
         reason,
-        restock: input.restock !== false,
-        notifyCustomer: input.notifyCustomer !== false,
+        restock,
+        notifyCustomer,
         refundMethod: {
-          originalPaymentMethodsRefund: input.refund !== false,
+          originalPaymentMethodsRefund: refund,
         },
         staffNote: input.staffNote?.trim() || null,
       },
@@ -83,5 +124,10 @@ export async function cancelShopifyOrder(
     );
   }
 
-  return payload?.job ?? null;
+  return {
+    job: payload?.job ?? null,
+    orderName: order.name || null,
+    customerEmail: customerEmail || null,
+    notified: notifyCustomer && Boolean(customerEmail),
+  };
 }

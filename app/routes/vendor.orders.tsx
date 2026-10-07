@@ -414,12 +414,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "cancel") {
     const attributionId = String(form.get("attributionId") || "");
     const reason = String(form.get("reason") || "OTHER") as OrderCancelReason;
-    const restock =
-      form.get("restock") === "on" || form.get("restock") === "true";
-    const refund = form.get("refund") === "on" || form.get("refund") === "true";
-    const notifyCustomer =
-      form.get("notifyCustomer") === "on" ||
-      form.get("notifyCustomer") === "true";
+    const restock = form.getAll("restock").map(String).includes("true");
+    const refund = form.getAll("refund").map(String).includes("true");
+    const notifyCustomer = form
+      .getAll("notifyCustomer")
+      .map(String)
+      .includes("true");
     const staffNote = String(form.get("staffNote") || "").trim();
 
     if (!attributionId) return { error: "Missing order." };
@@ -447,7 +447,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     try {
       const { admin } = await unauthenticated.admin(vendor.shop);
-      await cancelShopifyOrder(admin, {
+      const result = await cancelShopifyOrder(admin, {
         orderId: attribution.shopifyOrderId,
         reason,
         restock,
@@ -457,9 +457,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           staffNote ||
           `Cancelled by seller ${vendor.name} from Multivendor portal`,
       });
+      const label = attribution.shopifyOrderName || "order";
+      const message =
+        notifyCustomer && result.notified
+          ? `Cancelled ${label}. Shopify emailed ${result.customerEmail}.`
+          : notifyCustomer && !result.customerEmail
+            ? `Cancelled ${label}, but this order has no customer email so Shopify could not notify them.`
+            : `Cancelled ${label}.`;
       return {
         ok: true,
-        message: `Cancelled ${attribution.shopifyOrderName || "order"}.`,
+        message,
         attributionId,
         cancelled: true,
       };
@@ -1052,6 +1059,13 @@ export default function VendorOrders() {
                                     </option>
                                   ))}
                                 </select>
+                                <input type="hidden" name="refund" value="false" />
+                                <input type="hidden" name="restock" value="false" />
+                                <input
+                                  type="hidden"
+                                  name="notifyCustomer"
+                                  value="false"
+                                />
                                 <label
                                   style={{
                                     display: "flex",
@@ -1064,6 +1078,7 @@ export default function VendorOrders() {
                                   <input
                                     type="checkbox"
                                     name="refund"
+                                    value="true"
                                     defaultChecked
                                   />
                                   Refund payment
@@ -1080,6 +1095,7 @@ export default function VendorOrders() {
                                   <input
                                     type="checkbox"
                                     name="restock"
+                                    value="true"
                                     defaultChecked
                                   />
                                   Restock items
@@ -1096,6 +1112,7 @@ export default function VendorOrders() {
                                   <input
                                     type="checkbox"
                                     name="notifyCustomer"
+                                    value="true"
                                     defaultChecked
                                   />
                                   Email customer
