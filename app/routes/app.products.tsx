@@ -33,32 +33,12 @@ function shopAdminNewProductUrl() {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  const url = new URL(request.url);
-  const autofix = url.searchParams.get("autofix") === "1";
 
   const [products, vendors, settings] = await Promise.all([
     listMarketplaceProducts(admin, { first: 100 }),
     listVendors(session.shop),
     getOrCreateSettings(session.shop),
   ]);
-
-  let autofixMessage: string | null = null;
-  if (autofix) {
-    try {
-      const result = await fixAllMarketplaceProductsForShipping(admin);
-      autofixMessage = `Auto-fixed ${result.fixed} product${
-        result.fixed === 1 ? "" : "s"
-      } for checkout (continue selling / untracked). Clear cart and try again.`;
-      if (result.errors.length) {
-        autofixMessage += ` Issues: ${result.errors.slice(0, 2).join(" · ")}`;
-      }
-    } catch (error) {
-      autofixMessage =
-        error instanceof Error
-          ? error.message
-          : "Auto-fix failed. Use Fix shipping for seller products.";
-    }
-  }
 
   const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
 
@@ -68,7 +48,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     requireProductApproval: settings.requireProductApproval,
     shopifyProductsUrl: shopAdminProductsUrl(),
     shopifyNewProductUrl: shopAdminNewProductUrl(),
-    autofixMessage,
   };
 };
 
@@ -233,7 +212,6 @@ export default function AdminProductsPage() {
     requireProductApproval,
     shopifyProductsUrl,
     shopifyNewProductUrl,
-    autofixMessage,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -294,19 +272,6 @@ export default function AdminProductsPage() {
         <div className="nx-products__head">
           <h1 className="nx-products__title">Products</h1>
           <div className="nx-products__actions">
-            <Form method="post">
-              <input type="hidden" name="intent" value="fix-shipping" />
-              <button
-                className="nx-btn nx-btn--primary"
-                type="submit"
-                disabled={busy}
-                title="Restore tracked stock + continue selling so stock left shows and checkout still works"
-              >
-                {busy && navigation.formData?.get("intent") === "fix-shipping"
-                  ? "Fixing stock…"
-                  : "Fix stock & checkout"}
-              </button>
-            </Form>
             <a
               className="nx-btn"
               href={shopifyProductsUrl}
@@ -324,19 +289,12 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        {autofixMessage ? (
-          <div className="nx-banner okmsg">{autofixMessage}</div>
-        ) : null}
         {actionData && "error" in actionData && actionData.error && (
           <div className="nx-banner err">{actionData.error}</div>
         )}
         {actionData && "message" in actionData && actionData.message && (
           <div className="nx-banner okmsg">{actionData.message}</div>
         )}
-        <div className="nx-banner okmsg">
-          Need stock left on the product page and working checkout? Click{" "}
-          <strong>Fix stock &amp; checkout</strong>, then clear cart and retry.
-        </div>
 
         <div className="nx-panel">
           <div className="nx-panel__inner">
@@ -459,7 +417,7 @@ export default function AdminProductsPage() {
                                     type="submit"
                                     disabled={busy}
                                   >
-                                    Fix shipping
+                                    Repair stock
                                   </button>
                                 </Form>
                                 {isDraft ? (

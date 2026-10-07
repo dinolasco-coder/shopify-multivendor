@@ -131,12 +131,10 @@ export default function SettingsPage() {
     registerUrl,
     loginUrl,
     scopesConfigured,
-    sessionScopes,
     hasFulfillmentScopes,
     sessionHasFulfillmentScopes,
     hasShippingScopes,
     sessionHasShippingScopes,
-    reauthUrl,
     reauthFullUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -164,40 +162,13 @@ export default function SettingsPage() {
           <div className="nx-banner ok">{actionData.message}</div>
         )}
 
-        {!hasFulfillmentScopes ? (
+        {(!hasFulfillmentScopes ||
+          !sessionHasFulfillmentScopes ||
+          !hasShippingScopes ||
+          !sessionHasShippingScopes) && (
           <div className="nx-banner err">
-            Railway <strong>SCOPES</strong> is still missing fulfillment. Paste
-            the value below into Railway Variables, save, redeploy, then use
-            Re-authorize.
-          </div>
-        ) : !sessionHasFulfillmentScopes ? (
-          <div className="nx-banner err">
-            Server SCOPES are OK, but this shop’s token is still old. Click{" "}
-            <strong>Re-authorize Shopify permissions</strong> below and approve
-            the popup.
-          </div>
-        ) : (
-          <div className="nx-banner ok">
-            Fulfillment permissions look ready for this shop.
-          </div>
-        )}
-
-        {!hasShippingScopes ? (
-          <div className="nx-banner err">
-            Railway <strong>SCOPES</strong> is missing{" "}
-            <strong>read_shipping,write_shipping</strong>. Add them, redeploy,
-            then Re-authorize — needed so seller products can show Ship at
-            checkout.
-          </div>
-        ) : !sessionHasShippingScopes ? (
-          <div className="nx-banner err">
-            Shipping scopes are on the server, but this shop has not approved
-            them yet. Click <strong>Re-authorize Shopify permissions</strong>{" "}
-            and accept shipping access.
-          </div>
-        ) : (
-          <div className="nx-banner ok">
-            Shipping permissions look ready for this shop.
+            Some app permissions are missing. Scroll to{" "}
+            <strong>Permissions</strong> below and re-authorize.
           </div>
         )}
 
@@ -296,79 +267,64 @@ export default function SettingsPage() {
           </div>
 
           <button className="nx-btn" type="submit" disabled={busy}>
-            {busy &&
-            navigation.formData?.get("intent") !== "request-shipping-scopes"
-              ? "Saving…"
-              : "Save settings"}
+            {busy ? "Saving…" : "Save settings"}
           </button>
         </Form>
 
         <div className="nx-panel" style={{ marginTop: 16 }}>
-          <h2>Fulfillment &amp; shipping permissions</h2>
-          <p>
-            Seller fulfill + Ship checkout need these scopes on{" "}
-            <strong>Railway</strong> and approved on this shop.
-          </p>
-          <p>Railway SCOPES (copy/paste):</p>
-          <code
-            style={{
-              display: "block",
-              fontSize: 11,
-              background: "#f6f6f7",
-              border: "1px solid #e4e5e7",
-              borderRadius: 8,
-              padding: 10,
-              wordBreak: "break-all",
-              marginBottom: 10,
-            }}
-          >
-            {scopesText || "(SCOPES env not set on this server)"}
-          </code>
-          <p>
-            Server has fulfillment scopes:{" "}
-            <strong>{hasFulfillmentScopes ? "Yes" : "No"}</strong>
-            <br />
-            This shop token has fulfillment scopes:{" "}
-            <strong>{sessionHasFulfillmentScopes ? "Yes" : "No"}</strong>
-            <br />
-            Server has shipping scopes:{" "}
-            <strong>{hasShippingScopes ? "Yes" : "No"}</strong>
-            <br />
-            This shop token has shipping scopes:{" "}
-            <strong>{sessionHasShippingScopes ? "Yes" : "No"}</strong>
-          </p>
-          <p style={{ fontSize: 12, color: "#6d7175" }}>
-            Shop token scopes:{" "}
-            {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
-          </p>
+          <h2>Permissions</h2>
           <p style={{ fontSize: 13, color: "#6d7175" }}>
-            Click the button below — it opens Shopify in a <strong>new tab</strong>.
-            Approve access, then come back here and refresh.
+            Fulfillment:{" "}
+            <strong>
+              {sessionHasFulfillmentScopes ? "OK" : "Needs approval"}
+            </strong>
+            {" · "}
+            Shipping:{" "}
+            <strong>
+              {sessionHasShippingScopes ? "OK" : "Needs approval"}
+            </strong>
           </p>
-          <a
-            className="nx-btn"
-            href={reauthFullUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: "inline-flex",
-              textDecoration: "none",
-              marginTop: 8,
-            }}
-          >
-            Re-authorize Shopify permissions
-          </a>
-          <p style={{ marginTop: 12, fontSize: 12, color: "#6d7175" }}>
-            Backup link:{" "}
-            <a
-              className="nx-link"
-              href={reauthUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {reauthFullUrl}
-            </a>
-          </p>
+          {(!sessionHasFulfillmentScopes || !sessionHasShippingScopes) && (
+            <>
+              <p style={{ fontSize: 13, color: "#6d7175" }}>
+                Opens Shopify in a new tab. Approve, then refresh this page.
+              </p>
+              <a
+                className="nx-btn"
+                href={reauthFullUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: "inline-flex",
+                  textDecoration: "none",
+                  marginTop: 8,
+                }}
+              >
+                Re-authorize Shopify permissions
+              </a>
+            </>
+          )}
+          {(!hasFulfillmentScopes || !hasShippingScopes) && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13 }}>
+                Railway SCOPES value
+              </summary>
+              <code
+                style={{
+                  display: "block",
+                  fontSize: 11,
+                  background: "#f6f6f7",
+                  border: "1px solid #e4e5e7",
+                  borderRadius: 8,
+                  padding: 10,
+                  wordBreak: "break-all",
+                  marginTop: 8,
+                }}
+              >
+                {scopesText || "(SCOPES env not set on this server)"}
+              </code>
+            </details>
+          )}
         </div>
       </div>
     </s-page>
