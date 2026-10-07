@@ -29,42 +29,8 @@ import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { unauthenticated } from "../shopify.server";
 import { createVendorProduct } from "../services/products.server";
 import { getOrCreateSettings } from "../models/settings.server";
-import {
-  parseNameFromSpeech,
-  parsePriceFromSpeech,
-  parseQuantityFromSpeech,
-} from "../utils/parse-quick-product";
 
 type AddMethod = "choose" | "easy" | "manual";
-type SpeakField = "name" | "price" | "quantity";
-
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  abort?: () => void;
-  onresult:
-    | ((event: {
-        results: ArrayLike<
-          ArrayLike<{ transcript: string; confidence?: number }>
-        >;
-      }) => void)
-    | null;
-  onerror: ((event: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-};
-
-function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as Window & {
-    SpeechRecognition?: new () => SpeechRecognitionLike;
-    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  };
-  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
-}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
@@ -154,7 +120,7 @@ function Step({
           ) : null}
           {locked ? (
             <Banner tone="warning">
-              Add a photo in step 1 first, then you can speak here.
+              Add a photo in step 1 first, then fill this in.
             </Banner>
           ) : null}
         </BlockStack>
@@ -176,7 +142,6 @@ export default function VendorAddProduct() {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -185,10 +150,6 @@ export default function VendorAddProduct() {
   const [description, setDescription] = useState("");
   const [inventoryQuantity, setInventoryQuantity] = useState("1");
   const [showMore, setShowMore] = useState(false);
-  const [listeningFor, setListeningFor] = useState<SpeakField | null>(null);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const [speechHint, setSpeechHint] = useState<string | null>(null);
-  const [lastHeard, setLastHeard] = useState<string | null>(null);
   const [phase, setPhase] = useState<"edit" | "preview">("edit");
   const [method, setMethod] = useState<AddMethod>("choose");
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -205,9 +166,7 @@ export default function VendorAddProduct() {
   }, []);
 
   useEffect(() => {
-    setSpeechSupported(Boolean(getSpeechRecognition()));
     return () => {
-      recognitionRef.current?.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
@@ -228,7 +187,6 @@ export default function VendorAddProduct() {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(file);
     });
-    setSpeechHint("Photo ready. Now speak the name (step 2).");
   }, []);
 
   const openLaptopCamera = useCallback(async () => {
@@ -268,7 +226,6 @@ export default function VendorAddProduct() {
       streamRef.current = stream;
       setCameraOpen(true);
       setCameraStarting(false);
-      setSpeechHint("Camera is on. Point at your product, then tap Take photo.");
     } catch {
       setCameraStarting(false);
       setCameraOpen(false);
@@ -325,154 +282,7 @@ export default function VendorAddProduct() {
       return null;
     });
     setPhase("edit");
-    setSpeechHint("Add a photo first, then speak.");
   }, [stopCamera]);
-
-  const applyFieldSpeech = useCallback(
-    (field: SpeakField, transcript: string) => {
-      setLastHeard(transcript);
-      if (field === "name") {
-        const name = parseNameFromSpeech(transcript);
-        if (!name) {
-          setSpeechHint(
-            'Did not catch the name. Say clearly: "Red inabel scarf"',
-          );
-          return;
-        }
-        setTitle(name);
-        setSpeechHint(`Name saved: “${name}”. Next, say the price.`);
-        return;
-      }
-      if (field === "price") {
-        const parsed = parsePriceFromSpeech(transcript);
-        if (!parsed) {
-          setSpeechHint(
-            'Did not catch the price. Say: "250" or "two hundred fifty pesos"',
-          );
-          return;
-        }
-        setPrice(parsed);
-        setSpeechHint(
-          `Price saved: ₱${parsed}. Optional: say how many, then tap Preview my product.`,
-        );
-        return;
-      }
-      const qty = parseQuantityFromSpeech(transcript);
-      if (!qty) {
-        setSpeechHint('Did not catch the quantity. Say: "3" or "three pieces"');
-        return;
-      }
-      setInventoryQuantity(qty);
-      setSpeechHint(`Quantity saved: ${qty}. Tap Preview my product to check.`);
-    },
-    [],
-  );
-
-  const stopListening = useCallback(() => {
-    try {
-      recognitionRef.current?.abort?.();
-      recognitionRef.current?.stop();
-    } catch {
-      /* ignore */
-    }
-    recognitionRef.current = null;
-    setListeningFor(null);
-  }, []);
-
-  const startListening = useCallback(
-    (field: SpeakField) => {
-      if (!hasPhoto) {
-        setSpeechHint("Please add a photo first (step 1).");
-        return;
-      }
-
-      const Ctor = getSpeechRecognition();
-      if (!Ctor) {
-        setSpeechHint(
-          "Voice is not available on this browser. Type in the boxes instead.",
-        );
-        return;
-      }
-
-      // Fully stop any previous session before starting (fixes steps 3–4 failing)
-      try {
-        recognitionRef.current?.abort?.();
-        recognitionRef.current?.stop();
-      } catch {
-        /* ignore */
-      }
-      recognitionRef.current = null;
-
-      const prompts: Record<SpeakField, string> = {
-        name: 'Listening for name… say only the name, like "Red inabel scarf"',
-        price: 'Listening for price… say only the price, like "250" or "250 pesos"',
-        quantity: 'Listening for quantity… say only how many, like "3"',
-      };
-
-      setListeningFor(field);
-      setSpeechHint(prompts[field]);
-
-      window.setTimeout(() => {
-        try {
-          const recognition = new Ctor();
-          recognitionRef.current = recognition;
-          recognition.lang = "en-PH";
-          recognition.interimResults = false;
-          recognition.maxAlternatives = 5;
-          recognition.continuous = false;
-          recognition.onresult = (event) => {
-            const alternatives = event.results[0];
-            let best = "";
-            for (let i = 0; i < (alternatives?.length || 0); i++) {
-              const t = alternatives[i]?.transcript || "";
-              if (!t) continue;
-              if (!best) best = t;
-              if (field === "name" && parseNameFromSpeech(t)) {
-                best = t;
-                break;
-              }
-              if (field === "price" && parsePriceFromSpeech(t)) {
-                best = t;
-                break;
-              }
-              if (field === "quantity" && parseQuantityFromSpeech(t)) {
-                best = t;
-                break;
-              }
-            }
-            if (best) applyFieldSpeech(field, best);
-            else setSpeechHint("No speech heard. Tap the button and try again.");
-          };
-          recognition.onerror = (event) => {
-            setListeningFor(null);
-            const err = event.error || "";
-            if (err === "aborted") return;
-            if (err === "not-allowed") {
-              setSpeechHint(
-                "Microphone is blocked. Allow mic access, or type in the boxes.",
-              );
-            } else if (err === "no-speech") {
-              setSpeechHint(
-                "No speech heard. Tap again and speak a little louder, or type below.",
-              );
-            } else {
-              setSpeechHint(
-                "Could not hear clearly. Tap again, or type the number below.",
-              );
-            }
-          };
-          recognition.onend = () => setListeningFor(null);
-          recognition.start();
-        } catch {
-          setListeningFor(null);
-          setSpeechHint(
-            "Could not start the microphone. Type the price or quantity below.",
-          );
-        }
-      }, 250);
-    },
-    [applyFieldSpeech, hasPhoto],
-  );
 
   const bumpQty = useCallback((delta: number) => {
     setInventoryQuantity((prev) => {
@@ -516,22 +326,19 @@ export default function VendorAddProduct() {
 
   const goToPreview = useCallback(() => {
     if (!canPreview) return;
-    stopListening();
     stopCamera();
     setPhase("preview");
-    setSpeechHint(null);
-  }, [canPreview, stopCamera, stopListening]);
+  }, [canPreview, stopCamera]);
 
   const backToEdit = useCallback(() => {
     setPhase("edit");
   }, []);
 
   const backToChoose = useCallback(() => {
-    stopListening();
     stopCamera();
     setPhase("edit");
     setMethod("choose");
-  }, [stopCamera, stopListening]);
+  }, [stopCamera]);
 
   const pageTitle =
     phase === "preview"
@@ -539,7 +346,7 @@ export default function VendorAddProduct() {
       : method === "manual"
         ? "Add product (type)"
         : method === "easy"
-          ? "Add product (photo + speak)"
+          ? "Add product (photo)"
           : "Add a product";
 
   const pageBack =
@@ -580,10 +387,10 @@ export default function VendorAddProduct() {
                   fullWidth
                   onClick={() => setMethod("easy")}
                 >
-                  1. Photo + speak (easy)
+                  1. Photo first (easy)
                 </Button>
                 <Text as="p" tone="subdued">
-                  Take a photo, then speak the name and price.
+                  Take a photo, then type the name and price.
                 </Text>
                 <Button size="large" fullWidth onClick={() => setMethod("manual")}>
                   2. Type it yourself (manual)
@@ -701,8 +508,8 @@ export default function VendorAddProduct() {
           ) : method === "easy" ? (
             <>
               <Text as="p" variant="bodyLg">
-                First take a photo, then speak the name and price. You will see
-                a preview before saving.
+                First take a photo, then type the name and price. You will see a
+                preview before saving.
               </Text>
 
               {requireProductApproval && (
@@ -712,295 +519,184 @@ export default function VendorAddProduct() {
                 </Banner>
               )}
 
-          <Step
-            number={1}
-            title="Take a photo of your product"
-            hint="This comes first. Open your laptop camera, or choose a picture from your files."
-          >
-            {cameraError ? (
-              <Banner tone="critical" onDismiss={() => setCameraError(null)}>
-                {cameraError}
-              </Banner>
-            ) : null}
+              <Step
+                number={1}
+                title="Take a photo of your product"
+                hint="This comes first. Open your laptop camera, or choose a picture from your files."
+              >
+                {cameraError ? (
+                  <Banner tone="critical" onDismiss={() => setCameraError(null)}>
+                    {cameraError}
+                  </Banner>
+                ) : null}
 
-            {cameraOpen ? (
-              <BlockStack gap="300">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: "100%",
-                    maxHeight: 420,
-                    objectFit: "cover",
-                    borderRadius: 12,
-                    background: "#111",
-                    display: "block",
-                    transform: "scaleX(-1)",
-                  }}
+                {cameraOpen ? (
+                  <BlockStack gap="300">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{
+                        width: "100%",
+                        maxHeight: 420,
+                        objectFit: "cover",
+                        borderRadius: 12,
+                        background: "#111",
+                        display: "block",
+                        transform: "scaleX(-1)",
+                      }}
+                    />
+                    <Button
+                      variant="primary"
+                      size="large"
+                      fullWidth
+                      onClick={captureFromWebcam}
+                    >
+                      Take photo
+                    </Button>
+                    <Button size="large" fullWidth onClick={stopCamera}>
+                      Close camera
+                    </Button>
+                  </BlockStack>
+                ) : preview ? (
+                  <BlockStack gap="300">
+                    <img
+                      src={preview}
+                      alt="Your product"
+                      style={{
+                        width: "100%",
+                        maxHeight: 360,
+                        objectFit: "cover",
+                        borderRadius: 12,
+                        display: "block",
+                      }}
+                    />
+                    <InlineStack gap="300">
+                      <Button size="large" onClick={openLaptopCamera}>
+                        Take another photo
+                      </Button>
+                      <Button size="large" tone="critical" onClick={clearPhoto}>
+                        Remove photo
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                ) : (
+                  <BlockStack gap="300">
+                    <Button
+                      variant="primary"
+                      size="large"
+                      fullWidth
+                      loading={cameraStarting}
+                      onClick={openLaptopCamera}
+                    >
+                      Open camera
+                    </Button>
+                    <Button
+                      size="large"
+                      fullWidth
+                      onClick={() => galleryInputRef.current?.click()}
+                    >
+                      Choose from gallery
+                    </Button>
+                  </BlockStack>
+                )}
+              </Step>
+
+              <Step
+                number={2}
+                title="Product name"
+                hint='Example: "Red inabel scarf"'
+                locked={!hasPhoto}
+              >
+                <TextField
+                  label="Name"
+                  value={title}
+                  onChange={setTitle}
+                  autoComplete="off"
+                  placeholder="Red inabel scarf"
+                  disabled={!hasPhoto}
+                  helpText={title ? "✓ Name ready" : "Type the product name"}
                 />
-                <Button
-                  variant="primary"
-                  size="large"
-                  fullWidth
-                  onClick={captureFromWebcam}
-                >
-                  Take photo
-                </Button>
-                <Button size="large" fullWidth onClick={stopCamera}>
-                  Close camera
-                </Button>
-              </BlockStack>
-            ) : preview ? (
-              <BlockStack gap="300">
-                <img
-                  src={preview}
-                  alt="Your product"
-                  style={{
-                    width: "100%",
-                    maxHeight: 360,
-                    objectFit: "cover",
-                    borderRadius: 12,
-                    display: "block",
-                  }}
+              </Step>
+
+              <Step
+                number={3}
+                title="Price"
+                hint='Type the price, like "250".'
+                locked={!hasPhoto}
+              >
+                <TextField
+                  label="Price"
+                  type="text"
+                  inputMode="decimal"
+                  value={price}
+                  onChange={onPriceChange}
+                  autoComplete="off"
+                  prefix="₱"
+                  placeholder="250"
+                  disabled={!hasPhoto}
+                  helpText={price ? "✓ Price ready" : "Type the price"}
                 />
-                <InlineStack gap="300">
-                  <Button size="large" onClick={openLaptopCamera}>
-                    Take another photo
+              </Step>
+
+              <Step
+                number={4}
+                title="Shop location quantity (optional)"
+                hint="How many pieces are ready at the shop location. Type or use + and −. If you skip, we use 1."
+                locked={!hasPhoto}
+              >
+                <InlineStack gap="300" blockAlign="center">
+                  <Button
+                    size="large"
+                    disabled={!hasPhoto}
+                    onClick={() => bumpQty(-1)}
+                  >
+                    −
                   </Button>
-                  <Button size="large" tone="critical" onClick={clearPhoto}>
-                    Remove photo
+                  <div style={{ flex: 1, minWidth: 100 }}>
+                    <TextField
+                      label="Shop location quantity"
+                      labelHidden
+                      type="text"
+                      inputMode="numeric"
+                      value={inventoryQuantity}
+                      onChange={onQtyChange}
+                      autoComplete="off"
+                      disabled={!hasPhoto}
+                      align="center"
+                    />
+                  </div>
+                  <Button
+                    size="large"
+                    disabled={!hasPhoto}
+                    onClick={() => bumpQty(1)}
+                  >
+                    +
                   </Button>
                 </InlineStack>
-              </BlockStack>
-            ) : (
-              <BlockStack gap="300">
-                <Button
-                  variant="primary"
-                  size="large"
-                  fullWidth
-                  loading={cameraStarting}
-                  onClick={openLaptopCamera}
-                >
-                  Open camera
-                </Button>
-                <Button
-                  size="large"
-                  fullWidth
-                  onClick={() => galleryInputRef.current?.click()}
-                >
-                  Choose from gallery
-                </Button>
-              </BlockStack>
-            )}
-          </Step>
+              </Step>
 
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingLg">
-                Speak guide
-              </Text>
-              <Text as="p" variant="bodyLg">
-                After your photo, speak <strong>one thing at a time</strong>.
-              </Text>
-              <div
-                style={{
-                  background: "#f6f6f7",
-                  borderRadius: 12,
-                  padding: 16,
-                }}
-              >
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyLg">
-                    <strong>Name:</strong> “Red inabel scarf”
-                  </Text>
-                  <Text as="p" variant="bodyLg">
-                    <strong>Price:</strong> “250 pesos”
-                  </Text>
-                  <Text as="p" variant="bodyLg">
-                    <strong>Shop quantity:</strong> “3 pieces” (optional)
-                  </Text>
+              <Card>
+                <BlockStack gap="300">
+                  <Button
+                    onClick={() => setShowMore((v) => !v)}
+                    disclosure={showMore ? "up" : "down"}
+                  >
+                    More options (optional)
+                  </Button>
+                  <Collapsible open={showMore} id="more-options">
+                    <TextField
+                      label="About this product"
+                      value={description}
+                      onChange={setDescription}
+                      multiline={3}
+                      autoComplete="off"
+                      placeholder="Color, size, material…"
+                    />
+                  </Collapsible>
                 </BlockStack>
-              </div>
-              {!hasPhoto ? (
-                <Banner tone="warning">
-                  Finish step 1 (photo) before speaking.
-                </Banner>
-              ) : null}
-              {!speechSupported ? (
-                <Banner tone="warning">
-                  Voice is not available here. Type in the boxes below instead
-                  (Chrome on phone works best).
-                </Banner>
-              ) : null}
-            </BlockStack>
-          </Card>
-
-          <Step
-            number={2}
-            title="Say the product name"
-            hint='Tap the button, then say only the name. Example: "Red inabel scarf"'
-            locked={!hasPhoto}
-          >
-            <BlockStack gap="300">
-              <Button
-                variant={title ? undefined : "primary"}
-                size="large"
-                fullWidth
-                disabled={!hasPhoto}
-                tone={listeningFor === "name" ? "critical" : undefined}
-                onClick={() =>
-                  listeningFor === "name"
-                    ? stopListening()
-                    : startListening("name")
-                }
-              >
-                {listeningFor === "name"
-                  ? "Listening… tap to stop"
-                  : title
-                    ? "Say name again"
-                    : "Tap and say the name"}
-              </Button>
-              <TextField
-                label="Name (you can fix it here)"
-                value={title}
-                onChange={setTitle}
-                autoComplete="off"
-                placeholder="Red inabel scarf"
-                disabled={!hasPhoto}
-                helpText={title ? "✓ Name ready" : "Waiting for name"}
-              />
-            </BlockStack>
-          </Step>
-
-          <Step
-            number={3}
-            title="Say or type the price"
-            hint='Tap speak and say "250", or type the price in the box.'
-            locked={!hasPhoto}
-          >
-            <BlockStack gap="300">
-              <Button
-                variant={price ? undefined : "primary"}
-                size="large"
-                fullWidth
-                disabled={!hasPhoto}
-                tone={listeningFor === "price" ? "critical" : undefined}
-                onClick={() =>
-                  listeningFor === "price"
-                    ? stopListening()
-                    : startListening("price")
-                }
-              >
-                {listeningFor === "price"
-                  ? "Listening… tap to stop"
-                  : price
-                    ? "Say price again"
-                    : "Tap and say the price"}
-              </Button>
-              <TextField
-                label="Price (type here if speak fails)"
-                type="text"
-                inputMode="decimal"
-                value={price}
-                onChange={onPriceChange}
-                autoComplete="off"
-                prefix="₱"
-                placeholder="250"
-                disabled={!hasPhoto}
-                helpText={price ? "✓ Price ready" : "Type or speak the price"}
-              />
-            </BlockStack>
-          </Step>
-
-          <Step
-            number={4}
-            title="Shop location quantity (optional)"
-            hint="How many pieces are ready at the shop location. Speak, type, or use + and −. If you skip, we use 1."
-            locked={!hasPhoto}
-          >
-            <BlockStack gap="300">
-              <Button
-                size="large"
-                fullWidth
-                disabled={!hasPhoto}
-                tone={listeningFor === "quantity" ? "critical" : undefined}
-                onClick={() =>
-                  listeningFor === "quantity"
-                    ? stopListening()
-                    : startListening("quantity")
-                }
-              >
-                {listeningFor === "quantity"
-                  ? "Listening… tap to stop"
-                  : "Tap and say how many at the shop"}
-              </Button>
-              <InlineStack gap="300" blockAlign="center">
-                <Button
-                  size="large"
-                  disabled={!hasPhoto}
-                  onClick={() => bumpQty(-1)}
-                >
-                  −
-                </Button>
-                <div style={{ flex: 1, minWidth: 100 }}>
-                  <TextField
-                    label="Shop location quantity"
-                    labelHidden
-                    type="text"
-                    inputMode="numeric"
-                    value={inventoryQuantity}
-                    onChange={onQtyChange}
-                    autoComplete="off"
-                    disabled={!hasPhoto}
-                    align="center"
-                  />
-                </div>
-                <Button
-                  size="large"
-                  disabled={!hasPhoto}
-                  onClick={() => bumpQty(1)}
-                >
-                  +
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Step>
-
-          {(speechHint || lastHeard) && (
-            <Banner tone={listeningFor ? "info" : "success"}>
-              <BlockStack gap="100">
-                {speechHint ? <Text as="p">{speechHint}</Text> : null}
-                {lastHeard ? (
-                  <Text as="p" tone="subdued">
-                    Heard: “{lastHeard}”
-                  </Text>
-                ) : null}
-              </BlockStack>
-            </Banner>
-          )}
-
-          <Card>
-            <BlockStack gap="300">
-              <Button
-                onClick={() => setShowMore((v) => !v)}
-                disclosure={showMore ? "up" : "down"}
-              >
-                More options (optional)
-              </Button>
-              <Collapsible open={showMore} id="more-options">
-                <TextField
-                  label="Say a little more about it"
-                  value={description}
-                  onChange={setDescription}
-                  multiline={3}
-                  autoComplete="off"
-                  placeholder="Color, size, material…"
-                />
-              </Collapsible>
-            </BlockStack>
-          </Card>
+              </Card>
 
               <Card>
                 <BlockStack gap="300">
@@ -1020,7 +716,7 @@ export default function VendorAddProduct() {
                     <Text as="p" alignment="center" tone="subdued">
                       {!hasPhoto
                         ? "Add a photo first (step 1)"
-                        : "Then add a name and price by speaking (or typing)"}
+                        : "Then type a name and price"}
                     </Text>
                   ) : (
                     <Text as="p" alignment="center" tone="subdued">

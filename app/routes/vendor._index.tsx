@@ -88,7 +88,7 @@ export default function VendorDashboard() {
           </Link>
         </div>
         <p className="sx-secondary">
-          Tip: on Add a product you can use a photo and speak the name and price.
+          Tip: on Add a product you can take a photo, then type the name and price.
         </p>
       </div>
 
