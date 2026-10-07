@@ -211,7 +211,74 @@ export default function AdminAddProduct() {
     });
   }, []);
 
+  const openCameraPopup = useCallback(() => {
+    setCameraError(null);
+    setCameraStarting(true);
+
+    const url = new URL("/app/products/camera", window.location.origin);
+    url.search = window.location.search;
+    const popup = window.open(
+      url.toString(),
+      "marketplace-product-camera",
+      "popup=yes,width=720,height=820",
+    );
+
+    if (!popup) {
+      setCameraStarting(false);
+      setCameraError(
+        "Allow popups for this site to use the camera, or choose a photo from your files.",
+      );
+      return;
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "marketplace-camera-capture" || !data.dataUrl) {
+        return;
+      }
+      window.removeEventListener("message", onMessage);
+      clearInterval(closedCheck);
+      setCameraStarting(false);
+
+      fetch(String(data.dataUrl))
+        .then((res) => res.blob())
+        .then((blob) => {
+          const file = new File([blob], `product-${Date.now()}.jpg`, {
+            type: "image/jpeg",
+          });
+          applyPhoto(file);
+        })
+        .catch(() => {
+          setCameraError("Could not use the captured photo. Try again.");
+        });
+    };
+
+    window.addEventListener("message", onMessage);
+
+    const closedCheck = window.setInterval(() => {
+      if (popup.closed) {
+        window.clearInterval(closedCheck);
+        window.removeEventListener("message", onMessage);
+        setCameraStarting(false);
+      }
+    }, 400);
+  }, [applyPhoto]);
+
   const openLaptopCamera = useCallback(async () => {
+    // Shopify Admin iframe blocks camera — use a top-level popup instead.
+    const inIframe = (() => {
+      try {
+        return window.self !== window.top;
+      } catch {
+        return true;
+      }
+    })();
+    if (inIframe) {
+      openCameraPopup();
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError(
         "This browser cannot open the laptop camera. Use Choose from gallery, or try Chrome.",
@@ -250,11 +317,10 @@ export default function AdminAddProduct() {
     } catch {
       setCameraStarting(false);
       setCameraOpen(false);
-      setCameraError(
-        "Could not open the camera. Allow camera permission in your browser, then try again. Or choose a photo from your files.",
-      );
+      // Fall back to popup if inline camera is blocked.
+      openCameraPopup();
     }
-  }, [stopCamera]);
+  }, [openCameraPopup, stopCamera]);
 
   const captureFromWebcam = useCallback(() => {
     const video = videoRef.current;
