@@ -261,19 +261,17 @@ export default function AdminAddProduct() {
 
   const goToPreview = useCallback(() => {
     if (!canPreview) return;
-    stopCamera();
     setPhase("preview");
-  }, [canPreview, stopCamera]);
+  }, [canPreview]);
 
   const backToEdit = useCallback(() => {
     setPhase("edit");
   }, []);
 
   const backToChoose = useCallback(() => {
-    stopCamera();
     setPhase("edit");
     setMethod("choose");
-  }, [stopCamera]);
+  }, []);
 
   const pageTitle =
     phase === "preview"
