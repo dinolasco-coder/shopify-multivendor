@@ -50,12 +50,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionScopes.includes(s),
   );
 
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const install = new URL(`https://${session.shop}/admin/oauth/install`);
-  install.searchParams.set("client_id", apiKey);
-  if (scopesConfigured.length) {
-    install.searchParams.set("scope", scopesConfigured.join(","));
-  }
+  const storeHandle = session.shop.replace(/\.myshopify\.com$/i, "");
+  // Escape iframe → /reauth → Shopify grant screen
+  const reauthUrl = `${base}/reauth?shop=${encodeURIComponent(session.shop)}`;
+  const reauthFullUrl = `${reauthUrl}&mode=full`;
+  const adminOptionalUrl = `https://admin.shopify.com/store/${storeHandle}/oauth/install?client_id=${encodeURIComponent(
+    process.env.SHOPIFY_API_KEY || "",
+  )}&optional_scopes=${encodeURIComponent("read_shipping,write_shipping")}`;
 
   return {
     settings,
@@ -68,14 +69,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionHasFulfillmentScopes: sessionHasFulfillment,
     hasShippingScopes: envHasShipping,
     sessionHasShippingScopes: sessionHasShipping,
-    // Full-window Shopify install URL (updates required scopes). Avoid /auth JSON "null".
-    reauthUrl: install.toString(),
+    reauthUrl,
+    reauthFullUrl,
+    adminOptionalUrl,
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, scopes } = await authenticate.admin(request);
   const form = await request.formData();
+  const intent = String(form.get("intent") || "save");
+
+  if (intent === "request-shipping-scopes") {
+    try {
+      // Shopify shows a grant modal / redirect for optional scopes.
+      await scopes.request(["read_shipping", "write_shipping"]);
+      return {
+        ok: true,
+        message:
+          "Shipping permissions requested. If you approved them, refresh this page.",
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not open Shopify permission screen. Use the Re-authorize link below (opens outside the app).",
+      };
+    }
+  }
+
   const defaultCommissionPercent = Number(form.get("defaultCommissionPercent"));
   const requireProductApproval = form.get("requireProductApproval") === "on";
   const allowPublicRegistration = form.get("allowPublicRegistration") === "on";
@@ -139,6 +162,8 @@ export default function SettingsPage() {
     hasShippingScopes,
     sessionHasShippingScopes,
     reauthUrl,
+    reauthFullUrl,
+    adminOptionalUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -290,65 +315,6 @@ export default function SettingsPage() {
           </div>
 
           <div className="nx-panel">
-            <h2>Fulfillment permissions</h2>
-            <p>
-              Seller “Mark as fulfilled” needs these scopes on{" "}
-              <strong>Railway</strong> and approved on this shop.
-            </p>
-            <p>
-              Railway SCOPES (copy/paste):
-            </p>
-            <code
-              style={{
-                display: "block",
-                fontSize: 11,
-                background: "#f6f6f7",
-                border: "1px solid #e4e5e7",
-                borderRadius: 8,
-                padding: 10,
-                wordBreak: "break-all",
-                marginBottom: 10,
-              }}
-            >
-              {scopesText || "(SCOPES env not set on this server)"}
-            </code>
-            <p>
-              Server has fulfillment scopes:{" "}
-              <strong>{hasFulfillmentScopes ? "Yes" : "No"}</strong>
-              <br />
-              This shop token has fulfillment scopes:{" "}
-              <strong>{sessionHasFulfillmentScopes ? "Yes" : "No"}</strong>
-              <br />
-              Server has shipping scopes:{" "}
-              <strong>{hasShippingScopes ? "Yes" : "No"}</strong>
-              <br />
-              This shop token has shipping scopes:{" "}
-              <strong>{sessionHasShippingScopes ? "Yes" : "No"}</strong>
-            </p>
-            <p style={{ fontSize: 12, color: "#6d7175" }}>
-              Shop token scopes:{" "}
-              {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
-            </p>
-            <p style={{ fontSize: 13, color: "#6d7175" }}>
-              Opens Shopify’s permission screen in the full window. Approve the
-              fulfillment scopes, then come back to Settings (refresh if needed).
-            </p>
-            <a
-              className="nx-btn"
-              href={reauthUrl}
-              target="_top"
-              rel="noreferrer"
-              style={{
-                display: "inline-flex",
-                textDecoration: "none",
-                marginTop: 8,
-              }}
-            >
-              Re-authorize Shopify permissions
-            </a>
-          </div>
-
-          <div className="nx-panel">
             <h2>Payouts</h2>
             <p style={{ marginBottom: 0 }}>
               Record seller payouts on the Payouts page (manual bank/GCash).
@@ -356,9 +322,97 @@ export default function SettingsPage() {
           </div>
 
           <button className="nx-btn" type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Save settings"}
+            {busy &&
+            navigation.formData?.get("intent") !== "request-shipping-scopes"
+              ? "Saving…"
+              : "Save settings"}
           </button>
         </Form>
+
+        <div className="nx-panel" style={{ marginTop: 16 }}>
+          <h2>Fulfillment &amp; shipping permissions</h2>
+          <p>
+            Seller fulfill + Ship checkout need these scopes on{" "}
+            <strong>Railway</strong> and approved on this shop.
+          </p>
+          <p>Railway SCOPES (copy/paste):</p>
+          <code
+            style={{
+              display: "block",
+              fontSize: 11,
+              background: "#f6f6f7",
+              border: "1px solid #e4e5e7",
+              borderRadius: 8,
+              padding: 10,
+              wordBreak: "break-all",
+              marginBottom: 10,
+            }}
+          >
+            {scopesText || "(SCOPES env not set on this server)"}
+          </code>
+          <p>
+            Server has fulfillment scopes:{" "}
+            <strong>{hasFulfillmentScopes ? "Yes" : "No"}</strong>
+            <br />
+            This shop token has fulfillment scopes:{" "}
+            <strong>{sessionHasFulfillmentScopes ? "Yes" : "No"}</strong>
+            <br />
+            Server has shipping scopes:{" "}
+            <strong>{hasShippingScopes ? "Yes" : "No"}</strong>
+            <br />
+            This shop token has shipping scopes:{" "}
+            <strong>{sessionHasShippingScopes ? "Yes" : "No"}</strong>
+          </p>
+          <p style={{ fontSize: 12, color: "#6d7175" }}>
+            Shop token scopes:{" "}
+            {sessionScopes.length ? sessionScopes.join(", ") : "(none)"}
+          </p>
+          <p style={{ fontSize: 13, color: "#6d7175" }}>
+            Prefer the button first. If it does nothing, open a link in a{" "}
+            <strong>new tab</strong> (not inside the app frame).
+          </p>
+          <Form method="post" style={{ marginTop: 8 }}>
+            <input
+              type="hidden"
+              name="intent"
+              value="request-shipping-scopes"
+            />
+            <button className="nx-btn" type="submit" disabled={busy}>
+              {busy &&
+              navigation.formData?.get("intent") === "request-shipping-scopes"
+                ? "Opening…"
+                : "Request shipping permissions"}
+            </button>
+          </Form>
+          <p style={{ marginTop: 12, fontSize: 13 }}>
+            <a
+              className="nx-link"
+              href={reauthUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open permission page (new tab)
+            </a>
+            {" · "}
+            <a
+              className="nx-link"
+              href={adminOptionalUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Shopify Admin grant link
+            </a>
+            {" · "}
+            <a
+              className="nx-link"
+              href={reauthFullUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Full re-install authorize
+            </a>
+          </p>
+        </div>
       </div>
     </s-page>
   );
