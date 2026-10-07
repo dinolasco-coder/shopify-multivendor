@@ -52,6 +52,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const descriptionHtml = String(form.get("description") || "").trim();
   const price = String(form.get("price") || "").trim();
   const inventoryQuantity = Number(form.get("inventoryQuantity") || 1);
+  const aiFeeRaw = String(form.get("aiCustomizationFee") || "").trim();
 
   const images = form
     .getAll("media")
@@ -63,6 +64,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (!title || !price || Number(price) < 0 || Number.isNaN(Number(price))) {
     return { error: "Please enter a name and a price." };
+  }
+
+  let aiCustomizationFee: string | null = null;
+  if (aiFeeRaw) {
+    const feeNum = Number(aiFeeRaw);
+    if (Number.isNaN(feeNum) || feeNum < 0) {
+      return { error: "AI customization fee must be a valid amount (0 or more)." };
+    }
+    aiCustomizationFee = aiFeeRaw;
   }
 
   const settings = await getOrCreateSettings(vendor.shop);
@@ -81,6 +91,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         : 1,
       status,
       images,
+      aiCustomizationFee,
     });
     return redirect("/vendor/products");
   } catch (error) {
@@ -147,6 +158,7 @@ export default function VendorAddProduct() {
   const [preview, setPreview] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
+  const [aiCustomizationFee, setAiCustomizationFee] = useState("");
   const [description, setDescription] = useState("");
   const [inventoryQuantity, setInventoryQuantity] = useState("1");
   const [showMore, setShowMore] = useState(false);
@@ -291,16 +303,23 @@ export default function VendorAddProduct() {
     });
   }, []);
 
-  const onPriceChange = useCallback((value: string) => {
+  const normalizeDecimal = useCallback((value: string) => {
     // Allow digits and one decimal — avoids number-input bugs
     const cleaned = value.replace(/[^\d.]/g, "");
     const parts = cleaned.split(".");
-    const normalized =
-      parts.length <= 1
-        ? cleaned
-        : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`;
-    setPrice(normalized);
+    return parts.length <= 1
+      ? cleaned
+      : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`;
   }, []);
+
+  const onPriceChange = useCallback(
+    (value: string) => setPrice(normalizeDecimal(value)),
+    [normalizeDecimal],
+  );
+  const onAiFeeChange = useCallback(
+    (value: string) => setAiCustomizationFee(normalizeDecimal(value)),
+    [normalizeDecimal],
+  );
 
   const onQtyChange = useCallback((value: string) => {
     const cleaned = value.replace(/[^\d]/g, "");
@@ -320,9 +339,19 @@ export default function VendorAddProduct() {
     fd.set("description", description);
     fd.set("price", price);
     fd.set("inventoryQuantity", inventoryQuantity || "1");
+    fd.set("aiCustomizationFee", aiCustomizationFee);
     if (photo) fd.append("media", photo, photo.name);
     submit(fd, { method: "post", encType: "multipart/form-data" });
-  }, [method, title, description, price, inventoryQuantity, photo, submit]);
+  }, [
+    method,
+    title,
+    description,
+    price,
+    inventoryQuantity,
+    aiCustomizationFee,
+    photo,
+    submit,
+  ]);
 
   const goToPreview = useCallback(() => {
     if (!canPreview) return;
@@ -464,6 +493,16 @@ export default function VendorAddProduct() {
                           ₱{price}
                         </Text>
                       </div>
+                      {aiCustomizationFee.trim() ? (
+                        <div>
+                          <Text as="p" tone="subdued" variant="bodyMd">
+                            AI customization fee
+                          </Text>
+                          <Text as="p" variant="headingMd">
+                            ₱{aiCustomizationFee}
+                          </Text>
+                        </div>
+                      ) : null}
                       <div>
                         <Text as="p" tone="subdued" variant="bodyMd">
                           Shop location quantity
@@ -642,6 +681,26 @@ export default function VendorAddProduct() {
 
               <Step
                 number={4}
+                title="AI customization fee (optional)"
+                hint="Extra fee for AI customization. Leave blank if none."
+                locked={!hasPhoto}
+              >
+                <TextField
+                  label="AI customization fee"
+                  type="text"
+                  inputMode="decimal"
+                  value={aiCustomizationFee}
+                  onChange={onAiFeeChange}
+                  autoComplete="off"
+                  prefix="₱"
+                  placeholder="0.00"
+                  disabled={!hasPhoto}
+                  helpText="Optional. Example: 50 or 50.00"
+                />
+              </Step>
+
+              <Step
+                number={5}
                 title="Shop location quantity (optional)"
                 hint="How many pieces are ready at the shop location. Type or use + and −. If you skip, we use 1."
                 locked={!hasPhoto}
@@ -775,6 +834,24 @@ export default function VendorAddProduct() {
 
               <Step
                 number={3}
+                title="AI customization fee (optional)"
+                hint="Extra fee for AI customization. Leave blank if none."
+              >
+                <TextField
+                  label="AI customization fee"
+                  labelHidden
+                  type="text"
+                  inputMode="decimal"
+                  value={aiCustomizationFee}
+                  onChange={onAiFeeChange}
+                  autoComplete="off"
+                  prefix="₱"
+                  placeholder="0.00"
+                />
+              </Step>
+
+              <Step
+                number={4}
                 title="Shop location quantity"
                 hint="Pieces ready at the shop. Use + and − if that is easier."
               >
@@ -801,7 +878,7 @@ export default function VendorAddProduct() {
               </Step>
 
               <Step
-                number={4}
+                number={5}
                 title="Description (optional)"
                 hint="You can leave this blank"
               >
@@ -817,7 +894,7 @@ export default function VendorAddProduct() {
               </Step>
 
               <Step
-                number={5}
+                number={6}
                 title="Photo (optional)"
                 hint="Open your camera or choose a picture from your files."
               >

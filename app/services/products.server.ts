@@ -1,8 +1,13 @@
 import {
+  AI_CUSTOMIZATION_FEE_KEY,
+  AI_CUSTOMIZATION_FEE_NAMESPACE,
   VENDOR_METAFIELD_KEY,
   VENDOR_METAFIELD_NAMESPACE,
 } from "../constants";
-import { vendorMetafieldInput } from "./metafields.server";
+import {
+  aiCustomizationFeeMetafieldInput,
+  vendorMetafieldInput,
+} from "./metafields.server";
 
 type AdminGraphql = {
   graphql: (
@@ -22,8 +27,15 @@ export async function createVendorProduct(
     inventoryQuantity: number;
     status?: "ACTIVE" | "DRAFT";
     images?: File[];
+    /** Optional decimal string for custom.ai_customization_fee */
+    aiCustomizationFee?: string | null;
   },
 ) {
+  const metafields = [vendorMetafieldInput(input.vendorId)];
+  if (input.aiCustomizationFee) {
+    metafields.push(aiCustomizationFeeMetafieldInput(input.aiCustomizationFee));
+  }
+
   const createResponse = await admin.graphql(
     `#graphql
     mutation marketplaceProductCreate($product: ProductCreateInput!) {
@@ -48,7 +60,7 @@ export async function createVendorProduct(
           descriptionHtml: input.descriptionHtml || "",
           status: input.status ?? "ACTIVE",
           vendor: input.vendorName,
-          metafields: [vendorMetafieldInput(input.vendorId)],
+          metafields,
         },
       },
     },
@@ -251,8 +263,21 @@ export async function updateVendorProduct(
     variantId?: string;
     inventoryItemId?: string;
     inventoryQuantity?: number;
+    /** When set (including empty string), updates custom.ai_customization_fee */
+    aiCustomizationFee?: string | null;
   },
 ) {
+  const metafields: Array<ReturnType<typeof vendorMetafieldInput>> = [];
+  if (
+    input.aiCustomizationFee !== undefined &&
+    input.aiCustomizationFee !== null &&
+    input.aiCustomizationFee !== ""
+  ) {
+    metafields.push(
+      aiCustomizationFeeMetafieldInput(input.aiCustomizationFee),
+    );
+  }
+
   const updateResponse = await admin.graphql(
     `#graphql
     mutation marketplaceProductUpdate($product: ProductUpdateInput!) {
@@ -268,6 +293,7 @@ export async function updateVendorProduct(
           title: input.title,
           descriptionHtml: input.descriptionHtml || "",
           status: input.status,
+          ...(metafields.length ? { metafields } : {}),
         },
       },
     },
@@ -974,6 +1000,12 @@ export async function getProductDetail(admin: AdminGraphql, productId: string) {
         descriptionHtml
         handle
         metafield(namespace: "${VENDOR_METAFIELD_NAMESPACE}", key: "${VENDOR_METAFIELD_KEY}") {
+          value
+        }
+        aiCustomizationFee: metafield(
+          namespace: "${AI_CUSTOMIZATION_FEE_NAMESPACE}"
+          key: "${AI_CUSTOMIZATION_FEE_KEY}"
+        ) {
           value
         }
         variants(first: 1) {

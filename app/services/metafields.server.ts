@@ -1,4 +1,7 @@
 import {
+  AI_CUSTOMIZATION_FEE_KEY,
+  AI_CUSTOMIZATION_FEE_NAMESPACE,
+  AI_CUSTOMIZATION_FEE_TYPE,
   VENDOR_METAFIELD_KEY,
   VENDOR_METAFIELD_NAMESPACE,
   VENDOR_METAFIELD_NAMESPACE_APP,
@@ -59,6 +62,15 @@ export function vendorMetafieldInput(vendorId: string) {
     key: VENDOR_METAFIELD_KEY,
     type: "single_line_text_field",
     value: vendorId,
+  };
+}
+
+export function aiCustomizationFeeMetafieldInput(fee: string) {
+  return {
+    namespace: AI_CUSTOMIZATION_FEE_NAMESPACE,
+    key: AI_CUSTOMIZATION_FEE_KEY,
+    type: AI_CUSTOMIZATION_FEE_TYPE,
+    value: fee,
   };
 }
 

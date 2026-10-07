@@ -74,6 +74,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const descriptionHtml = String(form.get("description") || "").trim();
     const price = String(form.get("price") || "").trim();
     const inventoryQuantity = Number(form.get("inventoryQuantity") || 0);
+    const aiFeeRaw = String(form.get("aiCustomizationFee") || "").trim();
     const status = String(form.get("status") || "ACTIVE") as
       | "ACTIVE"
       | "DRAFT"
@@ -81,6 +82,17 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     if (!title || !price) {
       return { error: "Title and price are required." };
+    }
+
+    let aiCustomizationFee: string | null = null;
+    if (aiFeeRaw) {
+      const feeNum = Number(aiFeeRaw);
+      if (Number.isNaN(feeNum) || feeNum < 0) {
+        return {
+          error: "AI customization fee must be a valid amount (0 or more).",
+        };
+      }
+      aiCustomizationFee = aiFeeRaw;
     }
 
     const variant = existing.variants?.nodes?.[0];
@@ -96,6 +108,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       inventoryQuantity: Number.isFinite(inventoryQuantity)
         ? Math.max(0, Math.floor(inventoryQuantity))
         : undefined,
+      aiCustomizationFee,
     });
 
     // Reload list so stock column reflects the new quantity.
@@ -118,6 +131,9 @@ export default function EditVendorProduct() {
   const [title, setTitle] = useState(product.title);
   const [description, setDescription] = useState(product.descriptionHtml || "");
   const [price, setPrice] = useState(variant?.price || "");
+  const [aiCustomizationFee, setAiCustomizationFee] = useState(
+    product.aiCustomizationFee?.value || "",
+  );
   const [inventoryQuantity, setInventoryQuantity] = useState(
     String(variant?.inventoryQuantity ?? 0),
   );
@@ -140,6 +156,11 @@ export default function EditVendorProduct() {
             <input type="hidden" name="title" value={title} />
             <input type="hidden" name="description" value={description} />
             <input type="hidden" name="price" value={price} />
+            <input
+              type="hidden"
+              name="aiCustomizationFee"
+              value={aiCustomizationFee}
+            />
             <input
               type="hidden"
               name="inventoryQuantity"
@@ -167,6 +188,15 @@ export default function EditVendorProduct() {
                   value={price}
                   onChange={setPrice}
                   autoComplete="off"
+                />
+                <TextField
+                  label="AI customization fee"
+                  type="number"
+                  value={aiCustomizationFee}
+                  onChange={setAiCustomizationFee}
+                  autoComplete="off"
+                  prefix="₱"
+                  helpText="Optional. Leave blank if this product has no AI fee."
                 />
                 <TextField
                   label="Shop location quantity"
