@@ -9,12 +9,49 @@ import {
 } from "../utils/report-period";
 import { formatMoney } from "../utils/money";
 
+function appBaseUrl(request: Request) {
+  return (
+    process.env.SHOPIFY_APP_URL?.replace(/\/$/, "") ||
+    new URL(request.url).origin
+  );
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, scopes } = await authenticate.admin(request);
   const url = new URL(request.url);
   const period = parseReportPeriod(url.searchParams.get("period"));
   const analytics = await buildShopAnalytics(admin, session.shop, period);
-  return { analytics };
+
+  const scopesConfigured = (process.env.SCOPES || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let sessionScopes = (session.scope || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  try {
+    const detail = await scopes.query();
+    if (detail.granted?.length) sessionScopes = detail.granted;
+  } catch {
+    // keep session.scope
+  }
+
+  const envHasReports = scopesConfigured.includes("read_reports");
+  const sessionHasReports = sessionScopes.includes("read_reports");
+  const base = appBaseUrl(request);
+  const reauthFullUrl = `${base}/reauth?shop=${encodeURIComponent(session.shop)}&mode=full`;
+
+  return {
+    analytics,
+    envHasReports,
+    sessionHasReports,
+    reauthFullUrl,
+    partnerPcdUrl:
+      "https://partners.shopify.com/?hint=protected-customer-data",
+    pcdDocsUrl:
+      "https://shopify.dev/docs/apps/launch/protected-customer-data",
+  };
 };
 
 function formatChange(pct: number | null) {
@@ -35,9 +72,18 @@ const styles = `
   }
   .nx-tab.is-active { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
   .nx-banner {
-    margin-bottom: 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px;
-    background: #fff4d6; color: #5c4500;
+    margin-bottom: 14px; padding: 12px 14px; border-radius: 10px; font-size: 13px;
+    background: #fff4d6; color: #5c4500; line-height: 1.45;
   }
+  .nx-banner ol { margin: 8px 0 12px; padding-left: 18px; }
+  .nx-banner li { margin: 4px 0; }
+  .nx-banner__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .nx-btn {
+    display: inline-flex; align-items: center; border-radius: 8px; padding: 9px 12px;
+    font-size: 13px; font-weight: 600; text-decoration: none; border: 1px solid #c9cccf;
+    background: #fff; color: #202223;
+  }
+  .nx-btn--primary { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
   .nx-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
   .nx-metric {
     background: #fff; border: 1px solid #e4e5e7; border-radius: 12px; padding: 16px 18px;
@@ -79,11 +125,19 @@ const styles = `
 `;
 
 export default function AdminAnalyticsPage() {
-  const { analytics } = useLoaderData<typeof loader>();
+  const {
+    analytics,
+    envHasReports,
+    sessionHasReports,
+    reauthFullUrl,
+    pcdDocsUrl,
+  } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const period = parseReportPeriod(searchParams.get("period"));
   const change = formatChange(analytics.salesChangePercent);
   const maxSales = Math.max(1, ...analytics.series.map((p) => p.sales));
+  const needsSetup =
+    analytics.source === "fallback" || !envHasReports || !sessionHasReports;
 
   function setPeriod(next: string) {
     const params = new URLSearchParams(searchParams);
@@ -114,12 +168,45 @@ export default function AdminAnalyticsPage() {
           </div>
         </div>
 
-        {analytics.source === "fallback" && analytics.error ? (
+        {needsSetup ? (
           <div className="nx-banner">
-            Shopify Analytics needs the <strong>read_reports</strong> scope (and
-            protected customer data access). Showing order-based totals for now.
-            Update Railway SCOPES, redeploy, then re-open the app to approve
-            permissions. ({analytics.error})
+            <strong>Enable Shopify Analytics (same as Admin)</strong>
+            <ol>
+              <li>
+                Railway → your service → Variables → set{" "}
+                <code>SCOPES</code> to include <code>read_reports</code>, then
+                redeploy.
+                {!envHasReports ? (
+                  <em> (Server SCOPES is still missing read_reports.)</em>
+                ) : null}
+              </li>
+              <li>
+                Click <strong>Authorize reports access</strong> below and approve
+                the new permission in Shopify.
+                {!sessionHasReports ? (
+                  <em> (This shop has not granted read_reports yet.)</em>
+                ) : null}
+              </li>
+              <li>
+                Partners dashboard → your app → <strong>API access</strong> →{" "}
+                <strong>Protected customer data</strong> → request{" "}
+                <strong>Level 2</strong> (name, address, phone, email). Shopify
+                must approve this before ShopifyQL analytics works.
+              </li>
+            </ol>
+            Showing order-based totals until both are granted.
+            <div className="nx-banner__actions">
+              <a
+                className="nx-btn nx-btn--primary"
+                href={reauthFullUrl}
+                target="_top"
+              >
+                Authorize reports access
+              </a>
+              <a className="nx-btn" href={pcdDocsUrl} target="_blank" rel="noreferrer">
+                Protected customer data guide
+              </a>
+            </div>
           </div>
         ) : null}
 
