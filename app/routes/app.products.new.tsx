@@ -26,7 +26,6 @@ import {
   Collapsible,
   InlineStack,
   Page,
-  Select,
   Text,
   TextField,
 } from "@shopify/polaris";
@@ -164,7 +163,7 @@ export default function AdminAddProduct() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const [vendorId, setVendorId] = useState(vendors[0]?.id || "");
+  const vendorId = vendors[0]?.id || "";
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -178,8 +177,6 @@ export default function AdminAddProduct() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-
-  const selectedVendor = vendors.find((v) => v.id === vendorId);
 
   const hasPhoto = Boolean(photo && preview);
 
@@ -430,23 +427,6 @@ export default function AdminAddProduct() {
             onChange={onFileInput}
           />
 
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">
-                Seller
-              </Text>
-              <Select
-                label="Assign this product to"
-                options={vendors.map((v) => ({
-                  label: `${v.name} (${v.email})`,
-                  value: v.id,
-                }))}
-                value={vendorId}
-                onChange={setVendorId}
-              />
-            </BlockStack>
-          </Card>
-
           {method === "choose" && (
             <Card>
               <BlockStack gap="400">
@@ -516,14 +496,6 @@ export default function AdminAddProduct() {
                     }}
                   >
                     <BlockStack gap="300">
-                      <div>
-                        <Text as="p" tone="subdued" variant="bodyMd">
-                          Seller
-                        </Text>
-                        <Text as="p" variant="headingMd">
-                          {selectedVendor?.name || "—"}
-                        </Text>
-                      </div>
                       <div>
                         <Text as="p" tone="subdued" variant="bodyMd">
                           Name
