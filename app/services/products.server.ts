@@ -890,10 +890,14 @@ async function setInventoryQuantity(
   admin: AdminGraphql,
   inventoryItemId: string,
   quantity: number,
+  options?: { preferLocationIds?: string[] },
 ) {
-  // Write stock to every location that fulfills online orders so Checkout
-  // and Admin product quantity stay aligned.
-  const targets = await resolveOnlineInventoryLocations(admin);
+  // Keep the full quantity on ONE ship-from location only.
+  // Writing the same qty to every location inflated Admin "total" stock.
+  const primary = await resolveInventoryLocation(admin);
+  const preferred = (options?.preferLocationIds || []).filter(Boolean);
+  const targetId =
+    preferred.find((id) => id === primary.id) || preferred[0] || primary.id;
   const qty = Math.max(0, Math.floor(quantity));
 
   const levelsResponse = await admin.graphql(
@@ -922,11 +926,11 @@ async function setInventoryQuantity(
     );
   }
 
+  const levelNodes: Array<{ location?: { id?: string } }> =
+    levelsJson.data?.inventoryItem?.inventoryLevels?.nodes ?? [];
   const stockedLocationIds = new Set<string>(
-    (
-      levelsJson.data?.inventoryItem?.inventoryLevels?.nodes ?? []
-    )
-      .map((n: { location?: { id?: string } }) => n.location?.id)
+    levelNodes
+      .map((n) => n.location?.id)
       .filter(Boolean) as string[],
   );
 
@@ -954,21 +958,19 @@ async function setInventoryQuantity(
     );
   }
 
-  for (const location of targets) {
-    await activateInventoryAtLocation(
-      admin,
-      inventoryItemId,
-      location.id,
-      stockedLocationIds,
-    );
-  }
-
-  await setQuantityAtLocations(
+  await activateInventoryAtLocation(
     admin,
     inventoryItemId,
-    targets.map((l) => l.id),
-    qty,
+    targetId,
+    stockedLocationIds,
   );
+
+  // Target gets the real qty; other stocked locations go to 0 (undo duplicates).
+  const otherIds = [...stockedLocationIds].filter((id) => id !== targetId);
+  await setQuantityAtLocations(admin, inventoryItemId, [targetId], qty);
+  if (otherIds.length) {
+    await setQuantityAtLocations(admin, inventoryItemId, otherIds, 0);
+  }
 }
 
 type DeliveryProfileNode = {
@@ -1237,31 +1239,14 @@ export async function fixProductForShippingCheckout(
     variant.id,
   );
 
-  // Prefer stock on locations that belong to the shipping profile (Ship uses these).
-  if (profileResult.ok && profileResult.locationIds?.length) {
-    const stocked = new Set<string>();
-    for (const locationId of profileResult.locationIds) {
-      await activateInventoryAtLocation(
-        admin,
-        inventoryItemId,
-        locationId,
-        stocked,
-      );
-    }
-    await setQuantityAtLocations(
-      admin,
-      inventoryItemId,
-      profileResult.locationIds,
-      quantity,
-    );
-  }
-
-  // Also sync all online-fulfill locations (covers mixed pickup/ship shops).
-  await setInventoryQuantity(admin, inventoryItemId, quantity);
+  // Consolidate stock onto one shipping location (fixes inflated totals).
+  await setInventoryQuantity(admin, inventoryItemId, quantity, {
+    preferLocationIds: profileResult.locationIds,
+  });
 
   if (!profileResult.ok) {
     throw new Error(
-      `Stock updated for “${product.title}”, but shipping profile failed: ${profileResult.error}`,
+      `Stock consolidated for “${product.title}”, but shipping profile failed: ${profileResult.error}`,
     );
   }
 
