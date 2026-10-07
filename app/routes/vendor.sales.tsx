@@ -6,6 +6,7 @@ import {
   salesSummaryForVendor,
 } from "../models/attribution.server";
 import { formatMoney } from "../utils/money";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
@@ -29,8 +30,9 @@ export default function VendorSales() {
     <div>
       <h1 className="sx-title">Sales</h1>
       <p className="sx-sub">
-        Your order history and earnings after the {commissionPercent}% platform
-        commission.
+        {COMMISSION_ENABLED
+          ? `Your order history and earnings after the ${commissionPercent}% platform commission.`
+          : "Your order history and earnings."}
       </p>
 
       <div className="sx-metrics">
@@ -39,17 +41,21 @@ export default function VendorSales() {
           <p className="sx-metric__value">{summary.orderCount}</p>
         </div>
         <div className="sx-metric">
-          <p className="sx-metric__label">Gross revenue</p>
+          <p className="sx-metric__label">
+            {COMMISSION_ENABLED ? "Gross revenue" : "Revenue"}
+          </p>
           <p className="sx-metric__value">
             {formatMoney(summary.revenue, summary.currency)}
           </p>
         </div>
-        <div className="sx-metric">
-          <p className="sx-metric__label">Commission</p>
-          <p className="sx-metric__value">
-            {formatMoney(summary.commission, summary.currency)}
-          </p>
-        </div>
+        {COMMISSION_ENABLED ? (
+          <div className="sx-metric">
+            <p className="sx-metric__label">Commission</p>
+            <p className="sx-metric__value">
+              {formatMoney(summary.commission, summary.currency)}
+            </p>
+          </div>
+        ) : null}
         <div className="sx-metric">
           <p className="sx-metric__label">Your earnings</p>
           <p className="sx-metric__value">
@@ -71,8 +77,8 @@ export default function VendorSales() {
                 <tr>
                   <th>Order</th>
                   <th>Subtotal</th>
-                  <th>Commission</th>
-                  <th>You earn</th>
+                  {COMMISSION_ENABLED ? <th>Commission</th> : null}
+                  <th>{COMMISSION_ENABLED ? "You earn" : "Earnings"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,7 +93,11 @@ export default function VendorSales() {
                       </p>
                     </td>
                     <td>{formatMoney(row.subtotal, row.currency)}</td>
-                    <td>{formatMoney(row.commissionAmount, row.currency)}</td>
+                    {COMMISSION_ENABLED ? (
+                      <td>
+                        {formatMoney(row.commissionAmount, row.currency)}
+                      </td>
+                    ) : null}
                     <td>
                       {formatMoney(
                         row.subtotal - row.commissionAmount,

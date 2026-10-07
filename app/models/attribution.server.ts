@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { effectiveCommissionAmount } from "../utils/commission-flag";
 
 export async function upsertOrderAttributions(
   attributions: Array<{
@@ -45,19 +46,30 @@ export async function upsertOrderAttributions(
   }
 }
 
+function withEffectiveCommission<T extends { commissionAmount: number }>(
+  row: T,
+): T {
+  return {
+    ...row,
+    commissionAmount: effectiveCommissionAmount(row.commissionAmount),
+  };
+}
+
 export async function listAttributionsForShop(shop: string) {
-  return prisma.orderAttribution.findMany({
+  const rows = await prisma.orderAttribution.findMany({
     where: { shop },
     include: { vendor: true },
     orderBy: { createdAt: "desc" },
   });
+  return rows.map(withEffectiveCommission);
 }
 
 export async function listAttributionsForVendor(vendorId: string) {
-  return prisma.orderAttribution.findMany({
+  const rows = await prisma.orderAttribution.findMany({
     where: { vendorId },
     orderBy: { createdAt: "desc" },
   });
+  return rows.map(withEffectiveCommission);
 }
 
 export async function salesSummaryForVendor(vendorId: string) {
@@ -65,7 +77,9 @@ export async function salesSummaryForVendor(vendorId: string) {
     where: { vendorId },
   });
   const revenue = rows.reduce((sum, r) => sum + r.subtotal, 0);
-  const commission = rows.reduce((sum, r) => sum + r.commissionAmount, 0);
+  const commission = effectiveCommissionAmount(
+    rows.reduce((sum, r) => sum + r.commissionAmount, 0),
+  );
   return {
     orderCount: rows.length,
     revenue,
@@ -78,7 +92,9 @@ export async function salesSummaryForVendor(vendorId: string) {
 export async function salesSummaryForShop(shop: string) {
   const rows = await prisma.orderAttribution.findMany({ where: { shop } });
   const revenue = rows.reduce((sum, r) => sum + r.subtotal, 0);
-  const commission = rows.reduce((sum, r) => sum + r.commissionAmount, 0);
+  const commission = effectiveCommissionAmount(
+    rows.reduce((sum, r) => sum + r.commissionAmount, 0),
+  );
   return {
     orderCount: new Set(rows.map((r) => r.shopifyOrderId)).size,
     attributionCount: rows.length,

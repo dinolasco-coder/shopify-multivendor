@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { listAttributionsForVendor } from "../models/attribution.server";
 import { formatMoney } from "../utils/money";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 import { unauthenticated } from "../shopify.server";
 import { fulfillVendorLineItems } from "../services/fulfillment.server";
 import { cancelShopifyOrder } from "../services/orders.server";
@@ -848,13 +849,15 @@ export default function VendorOrders() {
                         <p className="sx-primary">
                           {formatMoney(order.subtotal, order.currency)}
                         </p>
-                        <p className="sx-secondary">
-                          Net{" "}
-                          {formatMoney(
-                            order.subtotal - order.commissionAmount,
-                            order.currency,
-                          )}
-                        </p>
+                        {COMMISSION_ENABLED ? (
+                          <p className="sx-secondary">
+                            Net{" "}
+                            {formatMoney(
+                              order.subtotal - order.commissionAmount,
+                              order.currency,
+                            )}
+                          </p>
+                        ) : null}
                       </td>
                       <td>
                         <span

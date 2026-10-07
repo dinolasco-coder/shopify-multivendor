@@ -9,6 +9,7 @@ import { listVendorPayoutBalances } from "../models/payouts.server";
 import { listMarketplaceProducts } from "../services/products.server";
 import { getOrCreateSettings } from "../models/settings.server";
 import { formatMoney } from "../utils/money";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 function appBaseUrl(request: Request) {
   return (
@@ -266,7 +267,9 @@ export default function Dashboard() {
               <Link className="nx-action" to="/app/vendors">
                 <p className="nx-action__title">Invite / manage sellers</p>
                 <p className="nx-action__desc">
-                  Add sellers, approve applications, set commission.
+                  {COMMISSION_ENABLED
+                    ? "Add sellers, approve applications, set commission."
+                    : "Add sellers and approve applications."}
                 </p>
               </Link>
               <Link className="nx-action" to="/app/products">
@@ -293,16 +296,20 @@ export default function Dashboard() {
           <div className="nx-panel">
             <h2 className="nx-panel__title">Money snapshot</h2>
             <p className="nx-panel__sub">
-              Default commission is {data.defaultCommissionPercent}%.
+              {COMMISSION_ENABLED
+                ? `Default commission is ${data.defaultCommissionPercent}%.`
+                : "Attributed seller revenue and outstanding payouts."}
             </p>
             <div className="nx-money-row">
               <span>Marketplace revenue</span>
               <strong>{formatMoney(data.revenue, data.currency)}</strong>
             </div>
-            <div className="nx-money-row">
-              <span>Your commission</span>
-              <strong>{formatMoney(data.commission, data.currency)}</strong>
-            </div>
+            {COMMISSION_ENABLED ? (
+              <div className="nx-money-row">
+                <span>Your commission</span>
+                <strong>{formatMoney(data.commission, data.currency)}</strong>
+              </div>
+            ) : null}
             <div className="nx-money-row">
               <span>Owed to sellers</span>
               <strong>{formatMoney(data.payoutOwed, data.currency)}</strong>

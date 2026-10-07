@@ -9,6 +9,7 @@ import { getVendorEarningsSummary } from "../models/payouts.server";
 import { unauthenticated } from "../shopify.server";
 import { listMarketplaceProducts } from "../services/products.server";
 import { formatMoney } from "../utils/money";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
@@ -141,7 +142,7 @@ export default function VendorDashboard() {
                 <tr>
                   <th>Order</th>
                   <th>Total</th>
-                  <th>Your net</th>
+                  {COMMISSION_ENABLED ? <th>Your net</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -156,9 +157,14 @@ export default function VendorDashboard() {
                       </p>
                     </td>
                     <td>{formatMoney(o.subtotal, o.currency)}</td>
-                    <td>
-                      {formatMoney(o.subtotal - o.commissionAmount, o.currency)}
-                    </td>
+                    {COMMISSION_ENABLED ? (
+                      <td>
+                        {formatMoney(
+                          o.subtotal - o.commissionAmount,
+                          o.currency,
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

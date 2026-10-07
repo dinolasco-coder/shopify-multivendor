@@ -27,6 +27,7 @@ import { hashPassword } from "../services/password.server";
 import { ensureVendorCollection } from "../services/collections.server";
 import { listMarketplaceProducts } from "../services/products.server";
 import type { VendorStatus } from "../constants";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 function appBaseUrl(request: Request) {
   return (
@@ -397,7 +398,9 @@ export default function VendorsPage() {
           <div>
             <h1 className="nx-sellers__title">Sellers</h1>
             <p className="nx-sellers__sub">
-              Add sellers, set commissions, and manage their profiles
+              {COMMISSION_ENABLED
+                ? "Add sellers, set commissions, and manage their profiles"
+                : "Add sellers and manage their profiles"}
             </p>
           </div>
           <div className="nx-sellers__actions">
@@ -456,18 +459,26 @@ export default function VendorsPage() {
                     required
                   />
                 </div>
-                <div>
-                  <label htmlFor="seller-commission">Commission %</label>
+                {COMMISSION_ENABLED ? (
+                  <div>
+                    <label htmlFor="seller-commission">Commission %</label>
+                    <input
+                      id="seller-commission"
+                      name="commissionPercent"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      defaultValue={settings.defaultCommissionPercent}
+                    />
+                  </div>
+                ) : (
                   <input
-                    id="seller-commission"
+                    type="hidden"
                     name="commissionPercent"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    defaultValue={settings.defaultCommissionPercent}
+                    value={settings.defaultCommissionPercent}
                   />
-                </div>
+                )}
               </div>
               <button className="nx-btn nx-btn--primary" type="submit" disabled={busy}>
                 {busy ? "Inviting…" : "Invite seller"}
@@ -601,49 +612,66 @@ export default function VendorsPage() {
                                       </button>
                                     </Form>
                                   )}
-                                <Form method="post">
-                                  <input type="hidden" name="intent" value="setCommission" />
-                                  <input type="hidden" name="vendorId" value={vendor.id} />
-                                  <input
-                                    name="commissionPercent"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={0.1}
-                                    defaultValue={vendor.commissionPercent}
-                                    title="Commission %"
-                                    style={{
-                                      width: 72,
-                                      padding: "7px 8px",
-                                      borderRadius: 8,
-                                      border: "1px solid #c9cccf",
-                                    }}
-                                  />
-                                  <input
-                                    name="commissionFlat"
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    defaultValue={
-                                      "commissionFlat" in vendor
-                                        ? String(
-                                            (vendor as { commissionFlat?: number })
-                                              .commissionFlat ?? 0,
-                                          )
-                                        : "0"
-                                    }
-                                    title="Flat fee"
-                                    style={{
-                                      width: 72,
-                                      padding: "7px 8px",
-                                      borderRadius: 8,
-                                      border: "1px solid #c9cccf",
-                                    }}
-                                  />
-                                  <button className="nx-btn" type="submit" disabled={busy}>
-                                    Save % + flat
-                                  </button>
-                                </Form>
+                                {COMMISSION_ENABLED ? (
+                                  <Form method="post">
+                                    <input
+                                      type="hidden"
+                                      name="intent"
+                                      value="setCommission"
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="vendorId"
+                                      value={vendor.id}
+                                    />
+                                    <input
+                                      name="commissionPercent"
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={0.1}
+                                      defaultValue={vendor.commissionPercent}
+                                      title="Commission %"
+                                      style={{
+                                        width: 72,
+                                        padding: "7px 8px",
+                                        borderRadius: 8,
+                                        border: "1px solid #c9cccf",
+                                      }}
+                                    />
+                                    <input
+                                      name="commissionFlat"
+                                      type="number"
+                                      min={0}
+                                      step={0.01}
+                                      defaultValue={
+                                        "commissionFlat" in vendor
+                                          ? String(
+                                              (
+                                                vendor as {
+                                                  commissionFlat?: number;
+                                                }
+                                              ).commissionFlat ?? 0,
+                                            )
+                                          : "0"
+                                      }
+                                      title="Flat fee"
+                                      style={{
+                                        width: 72,
+                                        padding: "7px 8px",
+                                        borderRadius: 8,
+                                        border: "1px solid #c9cccf",
+                                      }}
+                                    />
+                                    <button
+                                      className="nx-btn"
+                                      type="submit"
+                                      disabled={busy}
+                                    >
+                                      Save % + flat
+                                    </button>
+                                  </Form>
+                                ) : null}
                                 <Form
                                   method="post"
                                   onSubmit={(event) => {

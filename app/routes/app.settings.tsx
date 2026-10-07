@@ -10,6 +10,7 @@ import {
   getOrCreateSettings,
   updateSettings,
 } from "../models/settings.server";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 function appBaseUrl(request: Request) {
   return (
@@ -73,21 +74,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
+  const current = await getOrCreateSettings(session.shop);
 
-  const defaultCommissionPercent = Number(form.get("defaultCommissionPercent"));
   const requireProductApproval = form.get("requireProductApproval") === "on";
   const allowPublicRegistration = form.get("allowPublicRegistration") === "on";
-  const defaultCommissionFlat = Number(form.get("defaultCommissionFlat") || 0);
 
-  if (
-    !Number.isFinite(defaultCommissionPercent) ||
-    defaultCommissionPercent < 0 ||
-    defaultCommissionPercent > 100
-  ) {
-    return { error: "Default commission % must be between 0 and 100." };
-  }
-  if (!Number.isFinite(defaultCommissionFlat) || defaultCommissionFlat < 0) {
-    return { error: "Flat commission must be 0 or greater." };
+  let defaultCommissionPercent = current.defaultCommissionPercent;
+  let defaultCommissionFlat = current.defaultCommissionFlat ?? 0;
+
+  if (COMMISSION_ENABLED) {
+    defaultCommissionPercent = Number(form.get("defaultCommissionPercent"));
+    defaultCommissionFlat = Number(form.get("defaultCommissionFlat") || 0);
+
+    if (
+      !Number.isFinite(defaultCommissionPercent) ||
+      defaultCommissionPercent < 0 ||
+      defaultCommissionPercent > 100
+    ) {
+      return { error: "Default commission % must be between 0 and 100." };
+    }
+    if (!Number.isFinite(defaultCommissionFlat) || defaultCommissionFlat < 0) {
+      return { error: "Flat commission must be 0 or greater." };
+    }
   }
 
   const settings = await updateSettings(session.shop, {
@@ -152,7 +160,9 @@ export default function SettingsPage() {
       <div className="nx-set">
         <h1 className="nx-set__title">Settings</h1>
         <p className="nx-set__sub">
-          Commission defaults, product approval, and seller registration links.
+          {COMMISSION_ENABLED
+            ? "Commission defaults, product approval, and seller registration links."
+            : "Product approval and seller registration links."}
         </p>
 
         {actionData && "error" in actionData && actionData.error && (
@@ -173,45 +183,51 @@ export default function SettingsPage() {
         )}
 
         <Form method="post">
-          <div className="nx-panel">
-            <h2>Commission</h2>
-            <p>
-              Applied to newly invited or registered sellers. Override per
-              seller on the Sellers page.
-            </p>
-            <div className="nx-field">
-              <label htmlFor="defaultCommissionPercent">
-                Default commission %
-              </label>
-              <input
-                id="defaultCommissionPercent"
-                name="defaultCommissionPercent"
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                defaultValue={current.defaultCommissionPercent}
-                required
-              />
+          {COMMISSION_ENABLED ? (
+            <div className="nx-panel">
+              <h2>Commission</h2>
+              <p>
+                Applied to newly invited or registered sellers. Override per
+                seller on the Sellers page.
+              </p>
+              <div className="nx-field">
+                <label htmlFor="defaultCommissionPercent">
+                  Default commission %
+                </label>
+                <input
+                  id="defaultCommissionPercent"
+                  name="defaultCommissionPercent"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  defaultValue={current.defaultCommissionPercent}
+                  required
+                />
+              </div>
+              <div className="nx-field">
+                <label htmlFor="defaultCommissionFlat">
+                  Optional flat fee per attributed order (same currency as
+                  orders)
+                </label>
+                <input
+                  id="defaultCommissionFlat"
+                  name="defaultCommissionFlat"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  defaultValue={
+                    "defaultCommissionFlat" in current
+                      ? String(
+                          (current as { defaultCommissionFlat?: number })
+                            .defaultCommissionFlat ?? 0,
+                        )
+                      : "0"
+                  }
+                />
+              </div>
             </div>
-            <div className="nx-field">
-              <label htmlFor="defaultCommissionFlat">
-                Optional flat fee per attributed order (same currency as orders)
-              </label>
-              <input
-                id="defaultCommissionFlat"
-                name="defaultCommissionFlat"
-                type="number"
-                min={0}
-                step={0.01}
-                defaultValue={
-                  "defaultCommissionFlat" in current
-                    ? String((current as { defaultCommissionFlat?: number }).defaultCommissionFlat ?? 0)
-                    : "0"
-                }
-              />
-            </div>
-          </div>
+          ) : null}
 
           <div className="nx-panel">
             <h2>Products</h2>

@@ -5,6 +5,10 @@ import { requireApprovedVendor } from "../services/vendor-auth.server";
 import prisma from "../db.server";
 import { formatMoney } from "../utils/money";
 import { unauthenticated } from "../shopify.server";
+import {
+  COMMISSION_ENABLED,
+  effectiveCommissionAmount,
+} from "../utils/commission-flag";
 
 function findUrls(text: string): string[] {
   const found = text.match(/https?:\/\/[^\s<>"'\)\]|]+/gi) || [];
@@ -63,12 +67,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Not found", { status: 404 });
   }
 
-  const attribution = await prisma.orderAttribution.findUnique({
+  const attributionRow = await prisma.orderAttribution.findUnique({
     where: { id: attributionId },
   });
-  if (!attribution || attribution.vendorId !== vendor.id) {
+  if (!attributionRow || attributionRow.vendorId !== vendor.id) {
     throw new Response("Not found", { status: 404 });
   }
+  const attribution = {
+    ...attributionRow,
+    commissionAmount: effectiveCommissionAmount(
+      attributionRow.commissionAmount,
+    ),
+  };
 
   const items = JSON.parse(attribution.lineItemsJson || "[]") as Array<{
     title: string;
@@ -314,14 +324,16 @@ export default function VendorInvoice() {
               {formatMoney(attribution.subtotal, attribution.currency)}
             </strong>
           </div>
+          {COMMISSION_ENABLED ? (
+            <div>
+              <span>Platform commission</span>
+              <strong>
+                {formatMoney(attribution.commissionAmount, attribution.currency)}
+              </strong>
+            </div>
+          ) : null}
           <div>
-            <span>Platform commission</span>
-            <strong>
-              {formatMoney(attribution.commissionAmount, attribution.currency)}
-            </strong>
-          </div>
-          <div>
-            <span>Your net</span>
+            <span>{COMMISSION_ENABLED ? "Your net" : "Total"}</span>
             <strong>{formatMoney(sellerNet, attribution.currency)}</strong>
           </div>
         </div>

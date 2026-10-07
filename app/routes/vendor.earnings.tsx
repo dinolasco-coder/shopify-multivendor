@@ -3,6 +3,7 @@ import { useLoaderData } from "react-router";
 import { requireApprovedVendor } from "../services/vendor-auth.server";
 import { getVendorEarningsSummary } from "../models/payouts.server";
 import { formatMoney } from "../utils/money";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const result = await requireApprovedVendor(request);
@@ -26,24 +27,33 @@ export default function VendorEarnings() {
     <div>
       <h1 className="sx-title">Payouts</h1>
       <p className="sx-sub">
-        Platform commission: {commissionPercent}%
-        {commissionFlat > 0 ? ` + flat ${formatMoney(commissionFlat, summary.currency)} per order` : ""}.
+        {COMMISSION_ENABLED
+          ? `Platform commission: ${commissionPercent}%${
+              commissionFlat > 0
+                ? ` + flat ${formatMoney(commissionFlat, summary.currency)} per order`
+                : ""
+            }. `
+          : ""}
         The store admin pays you outside Shopify (bank / GCash).
       </p>
 
       <div className="sx-metrics">
         <div className="sx-metric">
-          <p className="sx-metric__label">Gross revenue</p>
+          <p className="sx-metric__label">
+            {COMMISSION_ENABLED ? "Gross revenue" : "Revenue"}
+          </p>
           <p className="sx-metric__value">
             {formatMoney(summary.revenue, summary.currency)}
           </p>
         </div>
-        <div className="sx-metric">
-          <p className="sx-metric__label">Platform commission</p>
-          <p className="sx-metric__value">
-            {formatMoney(summary.commission, summary.currency)}
-          </p>
-        </div>
+        {COMMISSION_ENABLED ? (
+          <div className="sx-metric">
+            <p className="sx-metric__label">Platform commission</p>
+            <p className="sx-metric__value">
+              {formatMoney(summary.commission, summary.currency)}
+            </p>
+          </div>
+        ) : null}
         <div className="sx-metric">
           <p className="sx-metric__label">Your earnings</p>
           <p className="sx-metric__value">

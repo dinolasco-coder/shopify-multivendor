@@ -21,6 +21,7 @@ import {
   type OrderCancelReason,
 } from "../utils/order-cancel";
 import { formatMoney } from "../utils/money";
+import { COMMISSION_ENABLED } from "../utils/commission-flag";
 
 function shopifyAdminPath(path: string) {
   const clean = path.replace(/^\//, "");
@@ -750,9 +751,10 @@ export default function AdminOrdersPage() {
                           <div style={{ marginTop: 8 }}>
                             {sellers.map((s) => (
                               <p className="nx-secondary" key={`${order.id}-${s.name}`}>
-                                {s.name}: {formatMoney(s.subtotal, s.currency)}{" "}
-                                (commission{" "}
-                                {formatMoney(s.commission, s.currency)})
+                                {s.name}: {formatMoney(s.subtotal, s.currency)}
+                                {COMMISSION_ENABLED
+                                  ? ` (commission ${formatMoney(s.commission, s.currency)})`
+                                  : ""}
                               </p>
                             ))}
                           </div>

@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { effectiveCommissionAmount } from "../utils/commission-flag";
 
 function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -73,7 +74,9 @@ export async function listVendorPayoutBalances(
   return vendors.map((vendor) => {
     const rows = attributions.filter((a) => a.vendorId === vendor.id);
     const revenue = rows.reduce((sum, r) => sum + r.subtotal, 0);
-    const commission = rows.reduce((sum, r) => sum + r.commissionAmount, 0);
+    const commission = effectiveCommissionAmount(
+      rows.reduce((sum, r) => sum + r.commissionAmount, 0),
+    );
     const earned = revenue - commission;
     const paid = payouts
       .filter((p) => p.vendorId === vendor.id)
@@ -108,9 +111,8 @@ export async function getVendorEarningsSummary(vendorId: string) {
   ]);
 
   const revenue = attributions.reduce((sum, r) => sum + r.subtotal, 0);
-  const commission = attributions.reduce(
-    (sum, r) => sum + r.commissionAmount,
-    0,
+  const commission = effectiveCommissionAmount(
+    attributions.reduce((sum, r) => sum + r.commissionAmount, 0),
   );
   const earned = revenue - commission;
   const paid = payouts.reduce((sum, p) => sum + p.amount, 0);
