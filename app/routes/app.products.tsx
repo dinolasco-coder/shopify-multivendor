@@ -300,11 +300,11 @@ export default function AdminProductsPage() {
                 className="nx-btn nx-btn--primary"
                 type="submit"
                 disabled={busy}
-                title="Turn off inventory blocking so seller products can checkout"
+                title="Restore tracked stock + continue selling so stock left shows and checkout still works"
               >
                 {busy && navigation.formData?.get("intent") === "fix-shipping"
-                  ? "Fixing out of stock…"
-                  : "Fix out of stock"}
+                  ? "Fixing stock…"
+                  : "Fix stock & checkout"}
               </button>
             </Form>
             <a
@@ -334,8 +334,8 @@ export default function AdminProductsPage() {
           <div className="nx-banner okmsg">{actionData.message}</div>
         )}
         <div className="nx-banner okmsg">
-          Checkout says out of stock? Click <strong>Fix out of stock</strong>,
-          then clear your cart and add the product again.
+          Need stock left on the product page and working checkout? Click{" "}
+          <strong>Fix stock &amp; checkout</strong>, then clear cart and retry.
         </div>
 
         <div className="nx-panel">

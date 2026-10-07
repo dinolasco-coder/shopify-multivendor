@@ -95,9 +95,9 @@ export async function createVendorProduct(
             {
               id: variant.id,
               price: input.price,
-              // Never block checkout on location/stock mismatches.
+              // Track stock (shows "stock left") + CONTINUE (checkout won't OOS).
               inventoryPolicy: "CONTINUE",
-              inventoryItem: { tracked: false, requiresShipping: true },
+              inventoryItem: { tracked: true, requiresShipping: true },
             },
           ],
         },
@@ -132,30 +132,11 @@ export async function createVendorProduct(
       );
     }
 
-    // Optional qty note for Admin; keep untracked so checkout never OOS.
     if (input.inventoryQuantity >= 0) {
-      try {
-        await setInventoryQuantity(
-          admin,
-          inventoryItemId,
-          input.inventoryQuantity,
-        );
-      } catch (error) {
-        console.error("Initial inventory set failed", product.id, error);
-      }
-      await admin.graphql(
-        `#graphql
-        mutation marketplaceCreateUntracked($id: ID!, $input: InventoryItemInput!) {
-          inventoryItemUpdate(id: $id, input: $input) {
-            userErrors { field message }
-          }
-        }`,
-        {
-          variables: {
-            id: inventoryItemId,
-            input: { tracked: false, requiresShipping: true },
-          },
-        },
+      await setInventoryQuantity(
+        admin,
+        inventoryItemId,
+        input.inventoryQuantity,
       );
     }
 
@@ -1282,25 +1263,9 @@ export async function fixProductForShippingCheckout(
     );
   }
 
-  // Critical: allow checkout even when location stock is wrong/zero.
+  // Track stock for "stock left" on the storefront, but CONTINUE so checkout
+  // does not block when location routing is picky.
   await setVariantContinueSelling(admin, productId, variant.id);
-
-  // Nuclear option for stubborn OOS: stop tracking so checkout never blocks.
-  // Sellers can still set a quantity later; inventory won't block payment.
-  await admin.graphql(
-    `#graphql
-    mutation marketplaceUntrackForCheckout($id: ID!, $input: InventoryItemInput!) {
-      inventoryItemUpdate(id: $id, input: $input) {
-        userErrors { field message }
-      }
-    }`,
-    {
-      variables: {
-        id: inventoryItemId,
-        input: { tracked: false, requiresShipping: true },
-      },
-    },
-  );
 
   const profileResult = await associateVariantWithDefaultShippingProfile(
     admin,
@@ -1312,25 +1277,8 @@ export async function fixProductForShippingCheckout(
       preferLocationIds: profileResult.locationIds,
     });
   } catch (error) {
-    // Still succeed if continue-selling is on — checkout should work.
     console.error("Inventory sync during fix failed", productId, error);
   }
-
-  // Keep untracked after qty sync (setInventoryQuantity re-enables tracking).
-  await admin.graphql(
-    `#graphql
-    mutation marketplaceKeepUntracked($id: ID!, $input: InventoryItemInput!) {
-      inventoryItemUpdate(id: $id, input: $input) {
-        userErrors { field message }
-      }
-    }`,
-    {
-      variables: {
-        id: inventoryItemId,
-        input: { tracked: false, requiresShipping: true },
-      },
-    },
-  );
 
   return {
     title: product.title,
@@ -1340,7 +1288,7 @@ export async function fixProductForShippingCheckout(
       : undefined,
     warning: profileResult.ok
       ? undefined
-      : `Continue selling is on. Shipping profile note: ${profileResult.error}`,
+      : `Stock tracking is on. Shipping profile note: ${profileResult.error}`,
   };
 }
 
