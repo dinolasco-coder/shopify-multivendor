@@ -81,6 +81,9 @@ export default function VendorDashboard() {
           <Link className="sx-btn sx-btn--lg" to="/vendor/products">
             My products
           </Link>
+          <Link className="sx-btn sx-btn--lg" to="/vendor/inventory">
+            Inventory
+          </Link>
           <Link className="sx-btn sx-btn--lg" to="/vendor/orders">
             My orders
           </Link>
@@ -118,9 +121,17 @@ export default function VendorDashboard() {
 
       {(lowStock > 0 || productCount === 0) && (
         <div className="sx-banner info">
-          {productCount === 0
-            ? "You have no products yet. Add your first product to start selling."
-            : `${lowStock} product${lowStock === 1 ? "" : "s"} low on stock (5 or fewer).`}
+          {productCount === 0 ? (
+            "You have no products yet. Add your first product to start selling."
+          ) : (
+            <>
+              {lowStock} product{lowStock === 1 ? "" : "s"} low on stock (5 or
+              fewer).{" "}
+              <Link className="sx-link" to="/vendor/inventory">
+                Update inventory
+              </Link>
+            </>
+          )}
         </div>
       )}
 

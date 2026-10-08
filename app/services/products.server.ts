@@ -351,6 +351,22 @@ export async function updateVendorProduct(
   return updateJson.data?.productUpdate?.product;
 }
 
+/** Update shop-location stock only (no title/price changes). */
+export async function updateVendorProductInventory(
+  admin: AdminGraphql,
+  input: {
+    inventoryItemId: string;
+    inventoryQuantity: number;
+  },
+) {
+  const qty = Math.max(0, Math.floor(input.inventoryQuantity));
+  if (!Number.isFinite(qty)) {
+    throw new Error("Inventory quantity must be a number.");
+  }
+  await setInventoryQuantity(admin, input.inventoryItemId, qty);
+  return { inventoryQuantity: qty };
+}
+
 export async function deleteVendorProduct(
   admin: AdminGraphql,
   productId: string,

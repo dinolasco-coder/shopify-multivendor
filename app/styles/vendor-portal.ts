@@ -103,6 +103,21 @@ export const vendorPortalStyles = `
   }
   .sx-table td { padding: 14px; border-bottom: 1px solid #ececec; vertical-align: top; font-size: 14px; }
   .sx-table tr:last-child td { border-bottom: none; }
+  .sx-stock {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 6px 10px; border-radius: 8px;
+    font-size: 18px; font-weight: 700; line-height: 1;
+  }
+  .sx-stock--ok { background: #e4f7e9; color: #0d6b2d; }
+  .sx-stock--warn { background: #fff4e5; color: #8a6116; }
+  .sx-stock--bad { background: #fbeae9; color: #8e1f0b; }
+  .sx-stock-form {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .sx-stock-input {
+    width: 88px; box-sizing: border-box; border: 1px solid #c9cccf;
+    border-radius: 8px; padding: 9px 10px; font-size: 16px; font-weight: 600;
+  }
   .sx-primary { font-weight: 700; margin: 0 0 2px; }
   .sx-secondary { margin: 0; color: var(--sx-muted); font-size: 12px; }
   .sx-empty { padding: 28px 12px; text-align: center; color: var(--sx-muted); }

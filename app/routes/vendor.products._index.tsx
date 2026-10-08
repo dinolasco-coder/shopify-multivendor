@@ -14,6 +14,7 @@ import {
   ensureVendorMetafieldsForVendor,
   getProductDetail,
   listMarketplaceProducts,
+  updateVendorProductInventory,
 } from "../services/products.server";
 import { fromProductPathId, toProductPathId } from "../utils/product-id";
 
@@ -43,7 +44,54 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { vendor } = result;
 
   const form = await request.formData();
-  if (String(form.get("intent") || "") !== "delete") {
+  const intent = String(form.get("intent") || "");
+
+  if (intent === "updateStock") {
+    const pathId = String(form.get("productId") || "");
+    const inventoryItemId = String(form.get("inventoryItemId") || "");
+    const inventoryQuantity = Number(form.get("inventoryQuantity"));
+
+    if (!pathId) return { error: "Missing product." };
+    if (!inventoryItemId) {
+      return {
+        error:
+          "This product has no inventory item. Enable tracking in Shopify Admin.",
+      };
+    }
+    if (!Number.isFinite(inventoryQuantity) || inventoryQuantity < 0) {
+      return { error: "Quantity must be 0 or greater." };
+    }
+
+    try {
+      const { admin } = await unauthenticated.admin(vendor.shop);
+      const productId = fromProductPathId(pathId);
+      const existing = await getProductDetail(admin, productId);
+      if (!existing || existing.metafield?.value !== vendor.id) {
+        return { error: "You can only update your own products." };
+      }
+
+      const expectedItemId = existing.variants?.nodes?.[0]?.inventoryItem?.id;
+      await updateVendorProductInventory(admin, {
+        inventoryItemId: expectedItemId || inventoryItemId,
+        inventoryQuantity: Math.floor(inventoryQuantity),
+      });
+
+      return {
+        ok: true,
+        message: `Stock for "${existing.title}" set to ${Math.floor(inventoryQuantity)}.`,
+        productId: pathId,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update inventory.",
+      };
+    }
+  }
+
+  if (intent !== "delete") {
     return { error: "Unknown action." };
   }
 
@@ -90,27 +138,41 @@ export default function VendorProducts() {
     busy && navigation.formData?.get("intent") === "delete"
       ? String(navigation.formData.get("productId") || "")
       : "";
+  const savingStockId =
+    busy && navigation.formData?.get("intent") === "updateStock"
+      ? String(navigation.formData.get("productId") || "")
+      : "";
 
   const rows = useMemo(() => {
-    return (products as Array<{
-      id: string;
-      title: string;
-      status: string;
-      totalInventory?: number | null;
-      featuredImage?: { url?: string } | null;
-      variants?: { nodes?: Array<{ price?: string }> };
-    }>)
-      .map((p) => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        stock: p.totalInventory ?? 0,
-        price: p.variants?.nodes?.[0]?.price
-          ? `$${p.variants.nodes[0].price}`
-          : "—",
-        image: p.featuredImage?.url || null,
-        pathId: toProductPathId(p.id),
-      }))
+    return (
+      products as Array<{
+        id: string;
+        title: string;
+        status: string;
+        totalInventory?: number | null;
+        featuredImage?: { url?: string } | null;
+        variants?: {
+          nodes?: Array<{
+            price?: string;
+            inventoryQuantity?: number | null;
+            inventoryItem?: { id?: string } | null;
+          }>;
+        };
+      }>
+    )
+      .map((p) => {
+        const variant = p.variants?.nodes?.[0];
+        return {
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          stock: variant?.inventoryQuantity ?? p.totalInventory ?? 0,
+          price: variant?.price ? `$${variant.price}` : "—",
+          image: p.featuredImage?.url || null,
+          pathId: toProductPathId(p.id),
+          inventoryItemId: variant?.inventoryItem?.id ?? null,
+        };
+      })
       .filter((row) => {
         const s = row.status.toUpperCase();
         if (tab === "active" && s !== "ACTIVE") return false;
@@ -127,9 +189,14 @@ export default function VendorProducts() {
           <h1 className="sx-title">Products</h1>
           <p className="sx-sub">Add, edit, or remove your listings</p>
         </div>
-        <Link className="sx-btn sx-btn--primary" to="/vendor/products/new">
-          + Add a product
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link className="sx-btn" to="/vendor/inventory">
+            Inventory
+          </Link>
+          <Link className="sx-btn sx-btn--primary" to="/vendor/products/new">
+            + Add a product
+          </Link>
+        </div>
       </div>
 
       {actionData && "error" in actionData && actionData.error && (
@@ -189,10 +256,18 @@ export default function VendorProducts() {
               <tbody>
                 {rows.map((row) => {
                   const badge = statusBadge(row.status);
+                  const stockTone =
+                    row.stock <= 0 ? "bad" : row.stock <= 5 ? "warn" : "ok";
                   return (
                     <tr key={row.id}>
                       <td>
-                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 12,
+                            alignItems: "center",
+                          }}
+                        >
                           {row.image ? (
                             <img
                               src={row.image}
@@ -216,9 +291,6 @@ export default function VendorProducts() {
                           )}
                           <div>
                             <p className="sx-primary">{row.title}</p>
-                            <p className="sx-secondary">
-                              Current inventory is {row.stock}
-                            </p>
                           </div>
                         </div>
                       </td>
@@ -227,10 +299,67 @@ export default function VendorProducts() {
                           {badge.label}
                         </span>
                       </td>
-                      <td>{row.stock}</td>
+                      <td>
+                        {row.inventoryItemId ? (
+                          <Form method="post" className="sx-stock-form">
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="updateStock"
+                            />
+                            <input
+                              type="hidden"
+                              name="productId"
+                              value={row.pathId}
+                            />
+                            <input
+                              type="hidden"
+                              name="inventoryItemId"
+                              value={row.inventoryItemId}
+                            />
+                            <span
+                              className={`sx-stock sx-stock--${stockTone}`}
+                              title="Current stock"
+                            >
+                              {row.stock}
+                            </span>
+                            <input
+                              className="sx-stock-input"
+                              name="inventoryQuantity"
+                              type="number"
+                              min={0}
+                              step={1}
+                              defaultValue={row.stock}
+                              key={`${row.pathId}-${row.stock}-${
+                                actionData &&
+                                "productId" in actionData &&
+                                actionData.productId === row.pathId
+                                  ? "saved"
+                                  : "base"
+                              }`}
+                              aria-label={`Update quantity for ${row.title}`}
+                            />
+                            <button
+                              className="sx-btn"
+                              type="submit"
+                              disabled={busy && savingStockId === row.pathId}
+                            >
+                              {savingStockId === row.pathId
+                                ? "Saving…"
+                                : "Update qty"}
+                            </button>
+                          </Form>
+                        ) : (
+                          <span className={`sx-stock sx-stock--${stockTone}`}>
+                            {row.stock}
+                          </span>
+                        )}
+                      </td>
                       <td>{row.price}</td>
                       <td>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <div
+                          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                        >
                           <Link
                             className="sx-btn"
                             to={`/vendor/products/${row.pathId}`}
@@ -260,7 +389,9 @@ export default function VendorProducts() {
                               type="submit"
                               disabled={busy && deletingId !== row.pathId}
                             >
-                              {deletingId === row.pathId ? "Deleting…" : "Delete"}
+                              {deletingId === row.pathId
+                                ? "Deleting…"
+                                : "Delete"}
                             </button>
                           </Form>
                         </div>
