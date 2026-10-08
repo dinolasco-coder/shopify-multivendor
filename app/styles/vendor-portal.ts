@@ -41,6 +41,30 @@ export const vendorPortalStyles = `
   }
   .sx-nav a:hover { background: #f1f2f3; }
   .sx-nav a.is-active { background: #e4e5e7; }
+  .sx-nav__group { display: flex; flex-direction: column; gap: 2px; }
+  .sx-nav__toggle {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; border: none; background: transparent; cursor: pointer;
+    padding: 10px 12px; border-radius: 8px;
+    color: var(--sx-text); font-size: 14px; font-weight: 600; font-family: inherit;
+    text-align: left;
+  }
+  .sx-nav__toggle:hover { background: #f1f2f3; }
+  .sx-nav__toggle.is-active { background: #e4e5e7; }
+  .sx-nav__chevron {
+    font-size: 12px; color: var(--sx-muted); transition: transform 0.15s ease;
+  }
+  .sx-nav__group.is-open .sx-nav__chevron { transform: rotate(180deg); }
+  .sx-nav__submenu {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 2px 0 4px 8px;
+  }
+  .sx-nav a.sx-nav__sublink {
+    font-size: 13px; font-weight: 600; padding: 9px 12px; color: #4a4d50;
+  }
+  .sx-nav a.sx-nav__sublink.is-active {
+    background: #eef0f1; color: var(--sx-text);
+  }
   .sx-nav__bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--sx-border); }
   .sx-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .sx-top {
@@ -84,6 +108,14 @@ export const vendorPortalStyles = `
   .sx-page-head {
     display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
     margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .sx-page-select {
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .sx-page-select select {
+    border: 1px solid #c9cccf; background: #fff; border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; font-weight: 600; color: #202223;
+    min-height: 44px;
   }
   .sx-btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -199,6 +231,8 @@ export const vendorPortalStyles = `
     .sx-sidebar__close { display: inline-flex; align-items: center; justify-content: center; }
     .sx-nav { flex-direction: column; flex-wrap: nowrap; }
     .sx-nav a { padding: 14px 12px; font-size: 15px; min-height: 44px; }
+    .sx-nav__toggle { padding: 14px 12px; font-size: 15px; min-height: 44px; }
+    .sx-nav a.sx-nav__sublink { min-height: 40px; }
     .sx-nav__bottom { width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--sx-border); }
     .sx-top { padding: 12px 14px; position: sticky; top: 0; z-index: 10; }
     .sx-top__email { display: none; }

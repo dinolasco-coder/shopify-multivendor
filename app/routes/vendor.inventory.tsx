@@ -4,6 +4,7 @@ import {
   Link,
   useActionData,
   useLoaderData,
+  useNavigate,
   useNavigation,
 } from "react-router";
 import { useMemo, useState } from "react";
@@ -133,6 +134,7 @@ export default function VendorInventory() {
   const { rows, lowStock, outOfStock, total } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const busy = navigation.state !== "idle";
   const [tab, setTab] = useState<"all" | "low" | "out">("all");
   const [query, setQuery] = useState("");
@@ -160,9 +162,21 @@ export default function VendorInventory() {
             Update stock for all your products in one place
           </p>
         </div>
-        <Link className="sx-btn" to="/vendor/products">
-          Back to products
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label className="sx-page-select">
+            <span className="sx-secondary">Go to</span>
+            <select
+              value="inventory"
+              onChange={(e) => {
+                if (e.target.value === "products") navigate("/vendor/products");
+              }}
+              aria-label="Products section"
+            >
+              <option value="products">All products</option>
+              <option value="inventory">Inventory</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {actionData && "error" in actionData && actionData.error && (

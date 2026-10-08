@@ -67,20 +67,75 @@ function NavLink({
   label,
   active,
   onNavigate,
+  nested,
 }: {
   to: string;
   label: string;
   active: boolean;
   onNavigate?: () => void;
+  nested?: boolean;
 }) {
   return (
     <Link
       to={to}
-      className={active ? "is-active" : undefined}
+      className={`${nested ? "sx-nav__sublink" : ""}${active ? " is-active" : ""}`.trim()}
       onClick={onNavigate}
     >
       {label}
     </Link>
+  );
+}
+
+function ProductsNavDropdown({
+  path,
+  onNavigate,
+}: {
+  path: string;
+  onNavigate?: () => void;
+}) {
+  const productsActive =
+    path.startsWith("/vendor/products") || path.startsWith("/vendor/inventory");
+  const [open, setOpen] = useState(productsActive);
+
+  useEffect(() => {
+    if (productsActive) setOpen(true);
+  }, [productsActive]);
+
+  return (
+    <div className={`sx-nav__group${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className={`sx-nav__toggle${productsActive ? " is-active" : ""}`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>Products</span>
+        <span className="sx-nav__chevron" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="sx-nav__submenu">
+          <NavLink
+            to="/vendor/products"
+            label="All products"
+            active={
+              path.startsWith("/vendor/products") &&
+              !path.startsWith("/vendor/inventory")
+            }
+            nested
+            onNavigate={onNavigate}
+          />
+          <NavLink
+            to="/vendor/inventory"
+            label="Inventory"
+            active={path.startsWith("/vendor/inventory")}
+            nested
+            onNavigate={onNavigate}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -188,18 +243,7 @@ export default function VendorLayout() {
               active={path.startsWith("/vendor/customized")}
               onNavigate={closeMenu}
             />
-            <NavLink
-              to="/vendor/products"
-              label="Products"
-              active={path.startsWith("/vendor/products")}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/inventory"
-              label="Inventory"
-              active={path.startsWith("/vendor/inventory")}
-              onNavigate={closeMenu}
-            />
+            <ProductsNavDropdown path={path} onNavigate={closeMenu} />
             <NavLink
               to="/vendor/earnings"
               label="Payouts"

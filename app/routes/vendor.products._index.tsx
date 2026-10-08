@@ -4,6 +4,7 @@ import {
   Link,
   useActionData,
   useLoaderData,
+  useNavigate,
   useNavigation,
 } from "react-router";
 import { useMemo, useState } from "react";
@@ -131,6 +132,7 @@ export default function VendorProducts() {
   const { products } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const busy = navigation.state !== "idle";
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
@@ -189,10 +191,20 @@ export default function VendorProducts() {
           <h1 className="sx-title">Products</h1>
           <p className="sx-sub">Add, edit, or remove your listings</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link className="sx-btn" to="/vendor/inventory">
-            Inventory
-          </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label className="sx-page-select">
+            <span className="sx-secondary">Go to</span>
+            <select
+              value="products"
+              onChange={(e) => {
+                if (e.target.value === "inventory") navigate("/vendor/inventory");
+              }}
+              aria-label="Products section"
+            >
+              <option value="products">All products</option>
+              <option value="inventory">Inventory</option>
+            </select>
+          </label>
           <Link className="sx-btn sx-btn--primary" to="/vendor/products/new">
             + Add a product
           </Link>
