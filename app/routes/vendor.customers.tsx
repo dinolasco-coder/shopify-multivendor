@@ -11,7 +11,7 @@ type CustomerRow = {
   name: string;
   email: string | null;
   phone: string | null;
-  address: string | null;
+  location: string | null;
   orderCount: number;
   totalSpent: number;
   currency: string;
@@ -19,7 +19,7 @@ type CustomerRow = {
   lastOrderName: string | null;
 };
 
-function formatAddress(shipping: {
+function formatLocation(shipping: {
   address1?: string | null;
   address2?: string | null;
   city?: string | null;
@@ -37,7 +37,7 @@ function formatAddress(shipping: {
     cityLine,
     shipping.country,
   ].filter(Boolean);
-  return parts.length ? parts.join(", ") : null;
+  return parts.length ? parts.join("\n") : null;
 }
 
 async function fetchCustomerBits(
@@ -56,7 +56,7 @@ async function fetchCustomerBits(
       email: string | null;
       phone: string | null;
       name: string;
-      address: string | null;
+      location: string | null;
     }
   > = {};
 
@@ -94,7 +94,7 @@ async function fetchCustomerBits(
           email: order.email ? String(order.email).trim().toLowerCase() : null,
           phone,
           name: String(shipping?.name || "").trim() || "Guest",
-          address: formatAddress(
+          location: formatLocation(
             shipping
               ? {
                   address1: shipping.address1,
@@ -132,7 +132,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       name: string;
       email: string | null;
       phone: string | null;
-      address: string | null;
+      location: string | null;
       orderIds: Set<string>;
       totalSpent: number;
       currency: string;
@@ -158,7 +158,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         name,
         email,
         phone,
-        address: info?.address || null,
+        location: info?.location || null,
         orderIds: new Set([row.shopifyOrderId]),
         totalSpent: row.subtotal,
         currency: row.currency,
@@ -172,8 +172,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     existing.totalSpent += row.subtotal;
     if (!existing.email && email) existing.email = email;
     if (!existing.phone && phone) existing.phone = phone;
-    if ((!existing.address || existing.address === "") && info?.address) {
-      existing.address = info.address;
+    if ((!existing.location || existing.location === "") && info?.location) {
+      existing.location = info.location;
     }
     if (name !== "Guest") existing.name = name;
     if (createdAt > existing.lastOrderAt) {
@@ -188,7 +188,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       name: c.name,
       email: c.email,
       phone: c.phone,
-      address: c.address,
+      location: c.location,
       orderCount: c.orderIds.size,
       totalSpent: Math.round(c.totalSpent * 100) / 100,
       currency: c.currency,
@@ -215,7 +215,7 @@ export default function VendorCustomers() {
         c.name.toLowerCase().includes(q) ||
         (c.email && c.email.includes(q)) ||
         (c.phone && c.phone.toLowerCase().includes(q)) ||
-        (c.address && c.address.toLowerCase().includes(q)) ||
+        (c.location && c.location.toLowerCase().includes(q)) ||
         (c.lastOrderName && c.lastOrderName.toLowerCase().includes(q))
       );
     });
@@ -242,7 +242,7 @@ export default function VendorCustomers() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, email, phone, or order"
+              placeholder="Search by name, email, phone, or location"
             />
           </div>
         </div>
@@ -260,6 +260,7 @@ export default function VendorCustomers() {
                 <tr>
                   <th>Customer</th>
                   <th>Contact</th>
+                  <th>Location</th>
                   <th>Orders</th>
                   <th>Spent with you</th>
                 </tr>
@@ -269,9 +270,6 @@ export default function VendorCustomers() {
                   <tr key={c.key}>
                     <td>
                       <p className="sx-primary">{c.name}</p>
-                      {c.address ? (
-                        <p className="sx-secondary">{c.address}</p>
-                      ) : null}
                     </td>
                     <td>
                       {c.email ? (
@@ -284,6 +282,18 @@ export default function VendorCustomers() {
                       {c.phone ? (
                         <p className="sx-secondary">{c.phone}</p>
                       ) : null}
+                    </td>
+                    <td>
+                      {c.location ? (
+                        <p
+                          className="sx-secondary"
+                          style={{ whiteSpace: "pre-line", maxWidth: 260 }}
+                        >
+                          {c.location}
+                        </p>
+                      ) : (
+                        <p className="sx-secondary">—</p>
+                      )}
                     </td>
                     <td>
                       <span className="sx-stock sx-stock--ok">
