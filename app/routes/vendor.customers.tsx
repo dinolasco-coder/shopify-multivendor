@@ -200,13 +200,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     customers,
     totalCustomers: customers.length,
-    currency: customers[0]?.currency ?? "PHP",
   };
 };
 
 export default function VendorCustomers() {
-  const { customers, totalCustomers, currency } =
-    useLoaderData<typeof loader>();
+  const { customers, totalCustomers } = useLoaderData<typeof loader>();
   const [query, setQuery] = useState("");
 
   const rows = useMemo(() => {
@@ -223,8 +221,6 @@ export default function VendorCustomers() {
     });
   }, [customers, query]);
 
-  const totalSpentAll = customers.reduce((s, c) => s + c.totalSpent, 0);
-
   return (
     <div>
       <div className="sx-page-head">
@@ -237,23 +233,6 @@ export default function VendorCustomers() {
         <Link className="sx-btn" to="/vendor/orders">
           View orders
         </Link>
-      </div>
-
-      <div className="sx-metrics">
-        <div className="sx-metric">
-          <p className="sx-metric__label">Customers</p>
-          <p className="sx-metric__value">{totalCustomers}</p>
-        </div>
-        <div className="sx-metric">
-          <p className="sx-metric__label">Showing</p>
-          <p className="sx-metric__value">{rows.length}</p>
-        </div>
-        <div className="sx-metric">
-          <p className="sx-metric__label">Their spend with you</p>
-          <p className="sx-metric__value">
-            {formatMoney(totalSpentAll, currency)}
-          </p>
-        </div>
       </div>
 
       <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
