@@ -262,7 +262,6 @@ export default function VendorCustomers() {
                   <th>Contact</th>
                   <th>Orders</th>
                   <th>Spent with you</th>
-                  <th>Last order</th>
                 </tr>
               </thead>
               <tbody>
@@ -292,14 +291,6 @@ export default function VendorCustomers() {
                       </span>
                     </td>
                     <td>{formatMoney(c.totalSpent, c.currency)}</td>
-                    <td>
-                      <p className="sx-primary">
-                        {c.lastOrderName || "—"}
-                      </p>
-                      <p className="sx-secondary">
-                        {new Date(c.lastOrderAt).toLocaleString()}
-                      </p>
-                    </td>
                   </tr>
                 ))}
               </tbody>
