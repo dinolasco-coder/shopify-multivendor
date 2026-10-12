@@ -87,6 +87,9 @@ export default function VendorDashboard() {
           <Link className="sx-btn sx-btn--lg" to="/vendor/orders">
             My orders
           </Link>
+          <Link className="sx-btn sx-btn--lg" to="/vendor/customers">
+            Customers
+          </Link>
           <Link className="sx-btn sx-btn--lg" to="/vendor/earnings">
             My payouts
           </Link>
