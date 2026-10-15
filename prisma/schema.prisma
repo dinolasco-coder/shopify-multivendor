@@ -43,6 +43,10 @@ model Vendor {
   shopifyCollectionId String?
   shopifyCollectionHandle String?
   bio                String?
+  payoutMethod       String?            // gcash | bank | other
+  payoutAccountName  String?
+  payoutAccountNumber String?
+  payoutNotes        String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   sessions           VendorSession[]

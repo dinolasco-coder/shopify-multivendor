@@ -17,9 +17,18 @@ import {
   createVendorPayout,
   listPayoutsForShop,
   listVendorPayoutBalances,
+  markAllOutstandingPaid,
   payoutBalancesToCsv,
 } from "../models/payouts.server";
 import { formatMoney } from "../utils/money";
+
+function payoutMethodLabel(value: string | null | undefined) {
+  if (!value) return null;
+  if (value === "gcash") return "GCash";
+  if (value === "bank") return "Bank";
+  if (value === "other") return "Other";
+  return value;
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -48,6 +57,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
+
+  if (intent === "markAllPaid") {
+    const note = String(form.get("note") || "").trim();
+    const reference = String(form.get("reference") || "").trim();
+    const paidAtRaw = String(form.get("paidAt") || "").trim();
+
+    let paidAt = new Date();
+    if (paidAtRaw) {
+      const parsed = new Date(paidAtRaw);
+      if (Number.isNaN(parsed.getTime())) {
+        return { error: "Invalid payout date." };
+      }
+      paidAt = parsed;
+    }
+
+    const result = await markAllOutstandingPaid(session.shop, {
+      note: note || null,
+      reference: reference || null,
+      paidAt,
+    });
+
+    if (result.count === 0) {
+      return { error: "No sellers with an outstanding balance." };
+    }
+
+    return {
+      ok: true,
+      message: `Recorded payouts for ${result.count} seller${
+        result.count === 1 ? "" : "s"
+      } totaling ${formatMoney(result.total, result.currency)}. Send the money via bank/GCash, then keep this as your record.`,
+    };
+  }
 
   if (intent !== "markPaid") {
     return { error: "Unknown action." };
@@ -109,6 +150,7 @@ const styles = `
   .nx-btn:disabled { opacity: 0.6; cursor: default; }
   .nx-panel { background: #fff; border: 1px solid #e4e5e7; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
   .nx-panel__title { font-size: 16px; font-weight: 700; margin: 0; padding: 16px 16px 0; }
+  .nx-panel__body { padding: 12px 16px 16px; }
   .nx-table { width: 100%; border-collapse: collapse; }
   .nx-table th {
     text-align: left; font-size: 12px; font-weight: 600; color: #6d7175;
@@ -127,10 +169,18 @@ const styles = `
   .nx-banner { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
   .nx-banner.err { background: #fbeae9; color: #8e1f0b; }
   .nx-banner.ok { background: #e4f7e9; color: #0d6b2d; }
+  .nx-bulk {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 10px;
+  }
+  .nx-bulk > div { min-width: 140px; flex: 1; }
+  .nx-bulk label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .nx-bulk input {
+    width: 100%; box-sizing: border-box; border: 1px solid #c9cccf; border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  }
   @media (max-width: 900px) {
     .nx-metrics { grid-template-columns: 1fr; }
     .nx-form { grid-template-columns: 1fr; }
-    .nx-table { min-width: 720px; }
+    .nx-table { min-width: 820px; }
     .nx-panel { overflow-x: auto; }
   }
 `;
@@ -145,6 +195,7 @@ export default function AdminPayoutsPage() {
   const totalEarned = balances.reduce((sum, b) => sum + b.earned, 0);
   const totalPaid = balances.reduce((sum, b) => sum + b.paid, 0);
   const totalBalance = balances.reduce((sum, b) => sum + Math.max(0, b.balance), 0);
+  const owedCount = balances.filter((b) => b.balance > 0.009).length;
   const currency = balances.find((b) => b.currency)?.currency || "PHP";
 
   return (
@@ -155,8 +206,8 @@ export default function AdminPayoutsPage() {
           <div>
             <h1 className="nx-pay__title">Payouts</h1>
             <p className="nx-pay__sub">
-              Track seller earnings vs what you paid outside Shopify (bank,
-              GCash, etc.).
+              Pay every seller outside Shopify (bank / GCash), then record it
+              here. Sellers add their payout details on their Payouts page.
             </p>
           </div>
           <a className="nx-btn" href="/app/payouts?export=csv">
@@ -193,6 +244,57 @@ export default function AdminPayoutsPage() {
         </div>
 
         <div className="nx-panel">
+          <h2 className="nx-panel__title">Pay all sellers</h2>
+          <div className="nx-panel__body">
+            <p className="nx-secondary" style={{ marginBottom: 0 }}>
+              {owedCount === 0
+                ? "No outstanding balances right now."
+                : `Records a payout for each of the ${owedCount} seller${
+                    owedCount === 1 ? "" : "s"
+                  } owed money (total ${formatMoney(totalBalance, currency)}). Send the transfers yourself, then click below to clear balances.`}
+            </p>
+            {owedCount > 0 ? (
+              <Form method="post">
+                <input type="hidden" name="intent" value="markAllPaid" />
+                <div className="nx-bulk">
+                  <div>
+                    <label>Date paid</label>
+                    <input name="paidAt" type="date" />
+                  </div>
+                  <div>
+                    <label>Reference</label>
+                    <input name="reference" placeholder="Batch / GCash ref" />
+                  </div>
+                  <div>
+                    <label>Note</label>
+                    <input name="note" placeholder="Optional note" />
+                  </div>
+                  <button
+                    className="nx-btn nx-btn--primary"
+                    type="submit"
+                    disabled={busy}
+                    onClick={(e) => {
+                      if (
+                        !window.confirm(
+                          `Record payouts for ${owedCount} seller(s) totaling ${formatMoney(
+                            totalBalance,
+                            currency,
+                          )}? Only do this after you have paid them.`,
+                        )
+                      ) {
+                        e.preventDefault();
+                      }
+                    }}
+                  >
+                    {busy ? "Saving…" : "Mark all paid"}
+                  </button>
+                </div>
+              </Form>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="nx-panel">
           <h2 className="nx-panel__title">Seller balances</h2>
           {balances.length === 0 ? (
             <div className="nx-empty">No sellers yet.</div>
@@ -201,6 +303,7 @@ export default function AdminPayoutsPage() {
               <thead>
                 <tr>
                   <th>Seller</th>
+                  <th>Payout to</th>
                   <th>Earned</th>
                   <th>Paid</th>
                   <th>Balance</th>
@@ -210,6 +313,7 @@ export default function AdminPayoutsPage() {
               <tbody>
                 {balances.map((row) => {
                   const open = openId === row.vendorId;
+                  const method = payoutMethodLabel(row.payoutMethod);
                   return (
                     <tr key={row.vendorId}>
                       <td>
@@ -217,6 +321,24 @@ export default function AdminPayoutsPage() {
                         <p className="nx-secondary">
                           {row.vendorEmail} · {row.status}
                         </p>
+                      </td>
+                      <td>
+                        {method || row.payoutAccountNumber ? (
+                          <>
+                            <p className="nx-primary">
+                              {method || "Account"}
+                              {row.payoutAccountName
+                                ? ` · ${row.payoutAccountName}`
+                                : ""}
+                            </p>
+                            <p className="nx-secondary">
+                              {row.payoutAccountNumber || "—"}
+                              {row.payoutNotes ? ` · ${row.payoutNotes}` : ""}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="nx-secondary">Not set by seller</p>
+                        )}
                       </td>
                       <td>{formatMoney(row.earned, row.currency)}</td>
                       <td>{formatMoney(row.paid, row.currency)}</td>

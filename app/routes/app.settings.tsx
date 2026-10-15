@@ -278,7 +278,8 @@ export default function SettingsPage() {
           <div className="nx-panel">
             <h2>Payouts</h2>
             <p style={{ marginBottom: 0 }}>
-              Record seller payouts on the Payouts page (manual bank/GCash).
+              Sellers save GCash/bank details on their Payouts page. Record
+              single or all-seller payouts on Admin → Payouts.
             </p>
           </div>
 

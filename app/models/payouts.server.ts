@@ -27,6 +27,41 @@ export async function createVendorPayout(data: {
   });
 }
 
+/** Record outstanding balances for every seller owed money. */
+export async function markAllOutstandingPaid(
+  shop: string,
+  opts?: { note?: string | null; reference?: string | null; paidAt?: Date },
+) {
+  const balances = await listVendorPayoutBalances(shop);
+  const owed = balances.filter((b) => b.balance > 0.009);
+  if (owed.length === 0) {
+    return { count: 0, total: 0, currency: "PHP" as string };
+  }
+
+  const paidAt = opts?.paidAt ?? new Date();
+  const note = opts?.note?.trim() || "Bulk payout — all sellers";
+  const reference = opts?.reference?.trim() || null;
+
+  await prisma.vendorPayout.createMany({
+    data: owed.map((b) => ({
+      shop,
+      vendorId: b.vendorId,
+      amount: roundMoney(b.balance),
+      currency: b.currency || "PHP",
+      note,
+      reference,
+      paidAt,
+    })),
+  });
+
+  const total = owed.reduce((sum, b) => sum + b.balance, 0);
+  return {
+    count: owed.length,
+    total: roundMoney(total),
+    currency: owed[0]?.currency || "PHP",
+  };
+}
+
 export async function listPayoutsForShop(shop: string, limit = 50) {
   return prisma.vendorPayout.findMany({
     where: { shop },
@@ -55,6 +90,10 @@ export type VendorPayoutBalance = {
   earned: number;
   paid: number;
   balance: number;
+  payoutMethod: string | null;
+  payoutAccountName: string | null;
+  payoutAccountNumber: string | null;
+  payoutNotes: string | null;
 };
 
 /** Per-vendor: earned (revenue - commission), paid, and outstanding balance. */
@@ -97,6 +136,10 @@ export async function listVendorPayoutBalances(
       earned: roundMoney(earned),
       paid: roundMoney(paid),
       balance: roundMoney(earned - paid),
+      payoutMethod: vendor.payoutMethod ?? null,
+      payoutAccountName: vendor.payoutAccountName ?? null,
+      payoutAccountNumber: vendor.payoutAccountNumber ?? null,
+      payoutNotes: vendor.payoutNotes ?? null,
     };
   });
 }
@@ -140,6 +183,10 @@ export function payoutBalancesToCsv(rows: VendorPayoutBalance[]) {
     "earned",
     "paid",
     "balance",
+    "payout_method",
+    "payout_account_name",
+    "payout_account_number",
+    "payout_notes",
   ];
   const lines = [
     header.join(","),
@@ -152,6 +199,10 @@ export function payoutBalancesToCsv(rows: VendorPayoutBalance[]) {
         r.earned.toFixed(2),
         r.paid.toFixed(2),
         r.balance.toFixed(2),
+        csvEscape(r.payoutMethod || ""),
+        csvEscape(r.payoutAccountName || ""),
+        csvEscape(r.payoutAccountNumber || ""),
+        csvEscape(r.payoutNotes || ""),
       ].join(","),
     ),
   ];

@@ -101,6 +101,10 @@ export async function updateVendor(
     bio?: string | null;
     passwordHash?: string;
     slug?: string;
+    payoutMethod?: string | null;
+    payoutAccountName?: string | null;
+    payoutAccountNumber?: string | null;
+    payoutNotes?: string | null;
   },
 ) {
   return prisma.vendor.update({ where: { id }, data });
