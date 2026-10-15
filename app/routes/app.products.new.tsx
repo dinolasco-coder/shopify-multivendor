@@ -4,14 +4,16 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import {
-  redirect,
   useActionData,
   useLoaderData,
+  useNavigate,
   useNavigation,
+  useRouteError,
   useSubmit,
 } from "react-router";
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -46,7 +48,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  // Use Shopify's redirect helper (not react-router) so embedded navigation
+  // keeps session tokens — plain redirects often land on a blank "200" page.
+  const { admin, session, redirect } = await authenticate.admin(request);
 
   const form = await request.formData();
   const vendorId = String(form.get("vendorId") || "").trim();
@@ -101,8 +105,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       images,
       aiCustomizationFee,
     });
-    return redirect("/app/products");
+    if (typeof redirect === "function") {
+      return redirect("/app/products");
+    }
+    // Fallback for distributions without App Bridge redirect helper
+    return { ok: true as const };
   } catch (error) {
+    if (error instanceof Response) throw error;
     return {
       error:
         error instanceof Error
@@ -155,10 +164,17 @@ export default function AdminAddProduct() {
   const { vendors } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const submit = useSubmit();
   const busy = navigation.state !== "idle";
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (actionData && "ok" in actionData && actionData.ok) {
+      navigate("/app/products", { replace: true });
+    }
+  }, [actionData, navigate]);
 
   const vendorId = vendors[0]?.id || "";
   const [photo, setPhoto] = useState<File | null>(null);
@@ -282,18 +298,22 @@ export default function AdminAddProduct() {
           ? "Add product (photo)"
           : "Add a product";
 
+  const goToProducts = useCallback(() => {
+    navigate("/app/products");
+  }, [navigate]);
+
   const pageBack =
     phase === "preview"
       ? { content: "Go back and change", onAction: backToEdit }
       : method !== "choose"
         ? { content: "Change method", onAction: backToChoose }
-        : { content: "Back to products", url: "/app/products" };
+        : { content: "Back to products", onAction: goToProducts };
 
   if (vendors.length === 0) {
     return (
       <Page
         title="Add a product"
-        backAction={{ content: "Back to products", url: "/app/products" }}
+        backAction={{ content: "Back to products", onAction: goToProducts }}
       >
         <Banner tone="warning">
           Approve a seller first (Sellers page), then you can add products for
@@ -837,6 +857,10 @@ export default function AdminAddProduct() {
       `}</style>
     </Page>
   );
+}
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
