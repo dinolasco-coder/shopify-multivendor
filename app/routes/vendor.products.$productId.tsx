@@ -146,10 +146,7 @@ export default function EditVendorProduct() {
     >
       <BlockStack gap="400">
         {actionData && "error" in actionData && actionData.error && (
-          <Banner tone="critical">{actionData.error}</Banner>
-        )}
-        {actionData && "message" in actionData && actionData.message && (
-          <Banner tone="success">{actionData.message}</Banner>
+          <Banner tone="critical">{String(actionData.error)}</Banner>
         )}
         <Card>
           <Form method="post">
