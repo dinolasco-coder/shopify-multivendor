@@ -1382,6 +1382,12 @@ export async function listMarketplaceProducts(
           metafield(namespace: "${VENDOR_METAFIELD_NAMESPACE}", key: "${VENDOR_METAFIELD_KEY}") {
             value
           }
+          aiCustomizationFee: metafield(
+            namespace: "${AI_CUSTOMIZATION_FEE_NAMESPACE}"
+            key: "${AI_CUSTOMIZATION_FEE_KEY}"
+          ) {
+            value
+          }
           variants(first: 10) {
             nodes {
               id

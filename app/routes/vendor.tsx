@@ -245,7 +245,7 @@ export default function VendorLayout() {
             />
             <NavLink
               to="/vendor/customized"
-              label="Customized"
+              label="AI custom"
               active={path.startsWith("/vendor/customized")}
               onNavigate={closeMenu}
             />
