@@ -58,7 +58,8 @@ When you **Invite vendor**, share the login URL (`{APP_URL}/vendor/login`) and t
 
 1. Vendor products get metafield `marketplace.vendor_id` = vendor DB id.
 2. `orders/create` and `orders/updated` webhooks split line items by that metafield.
-3. Commission = line subtotal × vendor commission %. Tracked in-app (manual payouts in v1).
+3. Commission = line subtotal × vendor commission % (optional; can be disabled).
+4. Payouts: manual Mark paid, or **PayMongo auto-pay after sale** (see [docs/PAYMONGO-PAYOUTS.md](docs/PAYMONGO-PAYOUTS.md)).
 
 ## Scripts
 
@@ -86,6 +87,9 @@ When you **Invite vendor**, share the login URL (`{APP_URL}/vendor/login`) and t
    | `SHOPIFY_APP_URL` | `https://YOUR-SERVICE.up.railway.app` (no trailing slash) |
    | `DATABASE_URL` | `file:/data/prod.sqlite` |
    | `NODE_ENV` | `production` |
+   | `PAYMONGO_SECRET_KEY` | `sk_test_…` (or `sk_live_…` after upgrade) |
+   | `PAYMONGO_AUTO_PAYOUTS` | `true` to auto-transfer after sales |
+   | `PAYMONGO_SOURCE_ACCOUNT_*` / `PAYMONGO_SOURCE_WALLET_ID` | Optional source wallet for disbursements |
 
 4. Update `shopify.app.toml` `application_url` + `redirect_urls` to that Railway host, then run:
 

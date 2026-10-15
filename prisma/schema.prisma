@@ -46,6 +46,7 @@ model Vendor {
   payoutMethod       String?            // gcash | bank | other
   payoutAccountName  String?
   payoutAccountNumber String?
+  payoutBankBic      String?            // PayMongo receiving institution BIC
   payoutNotes        String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -89,19 +90,27 @@ model OrderAttribution {
 }
 
 model VendorPayout {
-  id        String   @id @default(cuid())
-  shop      String
-  vendorId  String
-  amount    Float
-  currency  String   @default("PHP")
-  note      String?
-  reference String?
-  paidAt    DateTime @default(now())
-  createdAt DateTime @default(now())
-  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  shop               String
+  vendorId           String
+  amount             Float
+  currency           String   @default("PHP")
+  note               String?
+  reference          String?
+  paidAt             DateTime @default(now())
+  createdAt          DateTime @default(now())
+  status             String   @default("succeeded") // pending | succeeded | failed
+  provider           String   @default("manual") // manual | paymongo
+  providerTransferId String?
+  providerBatchId    String?
+  errorMessage       String?
+  attributionId      String?
+  vendor             Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@index([shop, vendorId])
   @@index([shop, paidAt])
+  @@index([attributionId])
+  @@index([providerTransferId])
 }
 
 model AppSettings {

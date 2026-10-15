@@ -1,8 +1,14 @@
 import prisma from "../db.server";
 import { effectiveCommissionAmount } from "../utils/commission-flag";
+import { vendorReadyForPaymongo } from "../services/auto-payout.server";
 
 function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+/** Amounts that reduce outstanding balance (pending + succeeded). Failed does not. */
+function countsTowardPaid(status: string | null | undefined) {
+  return !status || status === "succeeded" || status === "pending";
 }
 
 export async function createVendorPayout(data: {
@@ -13,6 +19,12 @@ export async function createVendorPayout(data: {
   note?: string | null;
   reference?: string | null;
   paidAt?: Date;
+  status?: string;
+  provider?: string;
+  attributionId?: string | null;
+  providerTransferId?: string | null;
+  providerBatchId?: string | null;
+  errorMessage?: string | null;
 }) {
   return prisma.vendorPayout.create({
     data: {
@@ -23,6 +35,12 @@ export async function createVendorPayout(data: {
       note: data.note?.trim() || null,
       reference: data.reference?.trim() || null,
       paidAt: data.paidAt ?? new Date(),
+      status: data.status ?? "succeeded",
+      provider: data.provider ?? "manual",
+      attributionId: data.attributionId ?? null,
+      providerTransferId: data.providerTransferId ?? null,
+      providerBatchId: data.providerBatchId ?? null,
+      errorMessage: data.errorMessage ?? null,
     },
   });
 }
@@ -51,6 +69,8 @@ export async function markAllOutstandingPaid(
       note,
       reference,
       paidAt,
+      status: "succeeded",
+      provider: "manual",
     })),
   });
 
@@ -93,7 +113,9 @@ export type VendorPayoutBalance = {
   payoutMethod: string | null;
   payoutAccountName: string | null;
   payoutAccountNumber: string | null;
+  payoutBankBic: string | null;
   payoutNotes: string | null;
+  autoPayReady: boolean;
 };
 
 /** Per-vendor: earned (revenue - commission), paid, and outstanding balance. */
@@ -118,7 +140,7 @@ export async function listVendorPayoutBalances(
     );
     const earned = revenue - commission;
     const paid = payouts
-      .filter((p) => p.vendorId === vendor.id)
+      .filter((p) => p.vendorId === vendor.id && countsTowardPaid(p.status))
       .reduce((sum, p) => sum + p.amount, 0);
     const currency =
       rows[0]?.currency ||
@@ -139,7 +161,9 @@ export async function listVendorPayoutBalances(
       payoutMethod: vendor.payoutMethod ?? null,
       payoutAccountName: vendor.payoutAccountName ?? null,
       payoutAccountNumber: vendor.payoutAccountNumber ?? null,
+      payoutBankBic: vendor.payoutBankBic ?? null,
       payoutNotes: vendor.payoutNotes ?? null,
+      autoPayReady: vendorReadyForPaymongo(vendor),
     };
   });
 }
@@ -158,7 +182,9 @@ export async function getVendorEarningsSummary(vendorId: string) {
     attributions.reduce((sum, r) => sum + r.commissionAmount, 0),
   );
   const earned = revenue - commission;
-  const paid = payouts.reduce((sum, p) => sum + p.amount, 0);
+  const paid = payouts
+    .filter((p) => countsTowardPaid(p.status))
+    .reduce((sum, p) => sum + p.amount, 0);
   const currency =
     attributions[0]?.currency || payouts[0]?.currency || "PHP";
 
@@ -186,7 +212,9 @@ export function payoutBalancesToCsv(rows: VendorPayoutBalance[]) {
     "payout_method",
     "payout_account_name",
     "payout_account_number",
+    "payout_bank_bic",
     "payout_notes",
+    "auto_pay_ready",
   ];
   const lines = [
     header.join(","),
@@ -202,7 +230,9 @@ export function payoutBalancesToCsv(rows: VendorPayoutBalance[]) {
         csvEscape(r.payoutMethod || ""),
         csvEscape(r.payoutAccountName || ""),
         csvEscape(r.payoutAccountNumber || ""),
+        csvEscape(r.payoutBankBic || ""),
         csvEscape(r.payoutNotes || ""),
+        r.autoPayReady ? "yes" : "no",
       ].join(","),
     ),
   ];

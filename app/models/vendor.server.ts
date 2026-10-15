@@ -104,6 +104,7 @@ export async function updateVendor(
     payoutMethod?: string | null;
     payoutAccountName?: string | null;
     payoutAccountNumber?: string | null;
+    payoutBankBic?: string | null;
     payoutNotes?: string | null;
   },
 ) {

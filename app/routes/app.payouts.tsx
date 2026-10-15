@@ -20,6 +20,15 @@ import {
   markAllOutstandingPaid,
   payoutBalancesToCsv,
 } from "../models/payouts.server";
+import {
+  retryFailedPaymongoPayout,
+  sendPaymongoPayout,
+} from "../services/auto-payout.server";
+import {
+  isPaymongoAutoPayoutsEnabled,
+  isPaymongoConfigured,
+} from "../services/paymongo.server";
+import { institutionLabel } from "../constants/paymongo-institutions";
 import { formatMoney } from "../utils/money";
 
 function payoutMethodLabel(value: string | null | undefined) {
@@ -50,7 +59,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     listPayoutsForShop(session.shop, 50),
   ]);
 
-  return { balances, recentPayouts };
+  return {
+    balances,
+    recentPayouts,
+    paymongoConfigured: isPaymongoConfigured(),
+    autoPayoutsEnabled: isPaymongoAutoPayoutsEnabled(),
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -86,8 +100,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ok: true,
       message: `Recorded payouts for ${result.count} seller${
         result.count === 1 ? "" : "s"
-      } totaling ${formatMoney(result.total, result.currency)}. Send the money via bank/GCash, then keep this as your record.`,
+      } totaling ${formatMoney(result.total, result.currency)}.`,
     };
+  }
+
+  if (intent === "sendPaymongo") {
+    if (!isPaymongoConfigured()) {
+      return {
+        error:
+          "PayMongo is not configured. Set PAYMONGO_SECRET_KEY (sk_test_… works without upgrade).",
+      };
+    }
+    const vendorId = String(form.get("vendorId") || "");
+    const amount = Number(form.get("amount"));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { error: "Enter a payout amount greater than 0." };
+    }
+
+    try {
+      const result = await sendPaymongoPayout({
+        shop: session.shop,
+        vendorId,
+        amount,
+        note: "Admin PayMongo payout",
+        referencePrefix: "admin",
+      });
+      if (result.payout.status === "failed") {
+        return {
+          error:
+            result.payout.errorMessage ||
+            "PayMongo transfer failed. Check seller details and wallet balance.",
+        };
+      }
+      const vendor = await getVendorById(vendorId);
+      return {
+        ok: true,
+        message: `PayMongo transfer ${result.payout.status} for ${
+          vendor?.name || "seller"
+        }: ${formatMoney(result.payout.amount, result.payout.currency)}.`,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "PayMongo send failed.",
+      };
+    }
+  }
+
+  if (intent === "retryPaymongo") {
+    const payoutId = String(form.get("payoutId") || "");
+    try {
+      const result = await retryFailedPaymongoPayout(payoutId, session.shop);
+      if (result.payout.status === "failed") {
+        return {
+          error: result.payout.errorMessage || "Retry failed.",
+        };
+      }
+      return {
+        ok: true,
+        message: `Retry submitted (${result.payout.status}).`,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Retry failed.",
+      };
+    }
   }
 
   if (intent !== "markPaid") {
@@ -125,6 +201,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     note: note || null,
     reference: reference || null,
     paidAt,
+    provider: "manual",
+    status: "succeeded",
   });
 
   return {
@@ -169,6 +247,7 @@ const styles = `
   .nx-banner { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
   .nx-banner.err { background: #fbeae9; color: #8e1f0b; }
   .nx-banner.ok { background: #e4f7e9; color: #0d6b2d; }
+  .nx-banner.info { background: #eef3ff; color: #1a3a8a; }
   .nx-bulk {
     display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 10px;
   }
@@ -177,16 +256,25 @@ const styles = `
   .nx-bulk input {
     width: 100%; box-sizing: border-box; border: 1px solid #c9cccf; border-radius: 8px; padding: 8px 10px; font-size: 13px;
   }
+  .nx-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .nx-pill {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: #f1f2f3; color: #5c5f62;
+  }
+  .nx-pill.ok { background: #e4f7e9; color: #0d6b2d; }
+  .nx-pill.warn { background: #fff4e5; color: #8a5a00; }
+  .nx-pill.err { background: #fbeae9; color: #8e1f0b; }
   @media (max-width: 900px) {
     .nx-metrics { grid-template-columns: 1fr; }
     .nx-form { grid-template-columns: 1fr; }
-    .nx-table { min-width: 820px; }
+    .nx-table { min-width: 900px; }
     .nx-panel { overflow-x: auto; }
   }
 `;
 
 export default function AdminPayoutsPage() {
-  const { balances, recentPayouts } = useLoaderData<typeof loader>();
+  const { balances, recentPayouts, paymongoConfigured, autoPayoutsEnabled } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -206,13 +294,23 @@ export default function AdminPayoutsPage() {
           <div>
             <h1 className="nx-pay__title">Payouts</h1>
             <p className="nx-pay__sub">
-              Pay every seller outside Shopify (bank / GCash), then record it
-              here. Sellers add their payout details on their Payouts page.
+              Auto-pay via PayMongo after sales, or record manual bank/GCash
+              payouts.
             </p>
           </div>
           <a className="nx-btn" href="/app/payouts?export=csv">
             Export CSV
           </a>
+        </div>
+
+        <div className={`nx-banner ${paymongoConfigured ? "info" : "err"}`}>
+          {paymongoConfigured
+            ? `PayMongo connected${
+                autoPayoutsEnabled
+                  ? " · auto-pay after sale is ON"
+                  : " · auto-pay is OFF (set PAYMONGO_AUTO_PAYOUTS=true)"
+              }. Use sk_test_ keys without account upgrade; live payouts need an enabled wallet.`
+            : "PayMongo not configured. Add PAYMONGO_SECRET_KEY (sk_test_… works for test transfers)."}
         </div>
 
         {actionData && "error" in actionData && actionData.error && (
@@ -244,14 +342,14 @@ export default function AdminPayoutsPage() {
         </div>
 
         <div className="nx-panel">
-          <h2 className="nx-panel__title">Pay all sellers</h2>
+          <h2 className="nx-panel__title">Mark all paid (manual)</h2>
           <div className="nx-panel__body">
             <p className="nx-secondary" style={{ marginBottom: 0 }}>
               {owedCount === 0
                 ? "No outstanding balances right now."
-                : `Records a payout for each of the ${owedCount} seller${
+                : `Records a manual payout for each of the ${owedCount} seller${
                     owedCount === 1 ? "" : "s"
-                  } owed money (total ${formatMoney(totalBalance, currency)}). Send the transfers yourself, then click below to clear balances.`}
+                  } owed (${formatMoney(totalBalance, currency)}).`}
             </p>
             {owedCount > 0 ? (
               <Form method="post">
@@ -279,7 +377,7 @@ export default function AdminPayoutsPage() {
                           `Record payouts for ${owedCount} seller(s) totaling ${formatMoney(
                             totalBalance,
                             currency,
-                          )}? Only do this after you have paid them.`,
+                          )}?`,
                         )
                       ) {
                         e.preventDefault();
@@ -321,6 +419,11 @@ export default function AdminPayoutsPage() {
                         <p className="nx-secondary">
                           {row.vendorEmail} · {row.status}
                         </p>
+                        {row.autoPayReady ? (
+                          <span className="nx-pill ok">Auto-pay ready</span>
+                        ) : (
+                          <span className="nx-pill warn">Needs payout details</span>
+                        )}
                       </td>
                       <td>
                         {method || row.payoutAccountNumber ? (
@@ -333,7 +436,9 @@ export default function AdminPayoutsPage() {
                             </p>
                             <p className="nx-secondary">
                               {row.payoutAccountNumber || "—"}
-                              {row.payoutNotes ? ` · ${row.payoutNotes}` : ""}
+                              {row.payoutBankBic
+                                ? ` · ${institutionLabel(row.payoutBankBic) || row.payoutBankBic}`
+                                : ""}
                             </p>
                           </>
                         ) : (
@@ -344,15 +449,45 @@ export default function AdminPayoutsPage() {
                       <td>{formatMoney(row.paid, row.currency)}</td>
                       <td>{formatMoney(row.balance, row.currency)}</td>
                       <td>
-                        <button
-                          type="button"
-                          className="nx-btn"
-                          onClick={() =>
-                            setOpenId(open ? null : row.vendorId)
-                          }
-                        >
-                          {open ? "Hide" : "Mark paid"}
-                        </button>
+                        <div className="nx-actions">
+                          <button
+                            type="button"
+                            className="nx-btn"
+                            onClick={() =>
+                              setOpenId(open ? null : row.vendorId)
+                            }
+                          >
+                            {open ? "Hide" : "Mark paid"}
+                          </button>
+                          {paymongoConfigured &&
+                          row.autoPayReady &&
+                          row.balance > 0.009 ? (
+                            <Form method="post">
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="sendPaymongo"
+                              />
+                              <input
+                                type="hidden"
+                                name="vendorId"
+                                value={row.vendorId}
+                              />
+                              <input
+                                type="hidden"
+                                name="amount"
+                                value={String(row.balance)}
+                              />
+                              <button
+                                className="nx-btn nx-btn--primary"
+                                type="submit"
+                                disabled={busy}
+                              >
+                                Send via PayMongo
+                              </button>
+                            </Form>
+                          ) : null}
+                        </div>
                         {open && (
                           <Form method="post">
                             <input type="hidden" name="intent" value="markPaid" />
@@ -381,7 +516,10 @@ export default function AdminPayoutsPage() {
                               </div>
                               <div>
                                 <label>Reference</label>
-                                <input name="reference" placeholder="GCash / bank ref" />
+                                <input
+                                  name="reference"
+                                  placeholder="GCash / bank ref"
+                                />
                               </div>
                               <div>
                                 <label>Note</label>
@@ -419,8 +557,10 @@ export default function AdminPayoutsPage() {
                   <th>Date</th>
                   <th>Seller</th>
                   <th>Amount</th>
+                  <th>Provider</th>
+                  <th>Status</th>
                   <th>Reference</th>
-                  <th>Note</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -429,8 +569,43 @@ export default function AdminPayoutsPage() {
                     <td>{String(p.paidAt).slice(0, 10)}</td>
                     <td>{p.vendor.name}</td>
                     <td>{formatMoney(p.amount, p.currency)}</td>
-                    <td>{p.reference || "—"}</td>
-                    <td>{p.note || "—"}</td>
+                    <td>{p.provider || "manual"}</td>
+                    <td>
+                      <span
+                        className={`nx-pill ${
+                          p.status === "succeeded"
+                            ? "ok"
+                            : p.status === "failed"
+                              ? "err"
+                              : "warn"
+                        }`}
+                      >
+                        {p.status || "succeeded"}
+                      </span>
+                      {p.errorMessage ? (
+                        <p className="nx-secondary">{p.errorMessage}</p>
+                      ) : null}
+                    </td>
+                    <td>{p.reference || p.providerTransferId || "—"}</td>
+                    <td>
+                      {p.provider === "paymongo" && p.status === "failed" ? (
+                        <Form method="post">
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="retryPaymongo"
+                          />
+                          <input type="hidden" name="payoutId" value={p.id} />
+                          <button
+                            className="nx-btn"
+                            type="submit"
+                            disabled={busy}
+                          >
+                            Retry
+                          </button>
+                        </Form>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>

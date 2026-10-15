@@ -278,8 +278,10 @@ export default function SettingsPage() {
           <div className="nx-panel">
             <h2>Payouts</h2>
             <p style={{ marginBottom: 0 }}>
-              Sellers save GCash/bank details on their Payouts page. Record
-              single or all-seller payouts on Admin → Payouts.
+              Sellers save GCash/bank + institution on their Payouts page.
+              With PayMongo configured, shares can auto-transfer after each
+              sale; otherwise use Admin → Payouts (Mark paid / Send via
+              PayMongo).
             </p>
           </div>
 
