@@ -1379,16 +1379,10 @@ export async function listMarketplaceProducts(
           handle
           featuredImage { url altText }
           totalInventory
-          variantsCount {
-            count
-          }
-          priceRangeV2 {
-            minVariantPrice { amount currencyCode }
-          }
           metafield(namespace: "${VENDOR_METAFIELD_NAMESPACE}", key: "${VENDOR_METAFIELD_KEY}") {
             value
           }
-          variants(first: 1) {
+          variants(first: 10) {
             nodes {
               id
               price
@@ -1403,6 +1397,11 @@ export async function listMarketplaceProducts(
   );
 
   const json = await response.json();
+  if (json.errors?.length) {
+    throw new Error(
+      json.errors.map((e: { message: string }) => e.message).join(", "),
+    );
+  }
   let products = json.data?.products?.nodes ?? [];
   if (options?.vendorId) {
     products = products.filter(

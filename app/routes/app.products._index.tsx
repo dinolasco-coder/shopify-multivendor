@@ -6,9 +6,11 @@ import type {
 import {
   Form,
   Link,
+  isRouteErrorResponse,
   useActionData,
   useLoaderData,
   useNavigation,
+  useRouteError,
   useSearchParams,
 } from "react-router";
 import { useMemo, useState } from "react";
@@ -31,20 +33,41 @@ function shopAdminProductsUrl() {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  const [products, vendors, settings] = await Promise.all([
-    listMarketplaceProducts(admin, { first: 100 }),
-    listVendors(session.shop),
-    getOrCreateSettings(session.shop),
-  ]);
+  try {
+    const [products, vendors, settings] = await Promise.all([
+      listMarketplaceProducts(admin, { first: 100 }),
+      listVendors(session.shop),
+      getOrCreateSettings(session.shop),
+    ]);
 
-  const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
+    const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
 
-  return {
-    products,
-    vendorMap,
-    requireProductApproval: settings.requireProductApproval,
-    shopifyProductsUrl: shopAdminProductsUrl(),
-  };
+    return {
+      products: Array.isArray(products) ? products : [],
+      vendorMap,
+      requireProductApproval: Boolean(settings.requireProductApproval),
+      shopifyProductsUrl: shopAdminProductsUrl(),
+      loadError: null as string | null,
+    };
+  } catch (error) {
+    console.error("Admin products loader failed", session.shop, error);
+    // Avoid rethrowing Response objects (App Bridge can render bare status like "200").
+    const message =
+      error instanceof Error
+        ? error.message
+        : error instanceof Response
+          ? `Request failed (${error.status})`
+          : "Failed to load products.";
+    const vendors = await listVendors(session.shop).catch(() => []);
+    const settings = await getOrCreateSettings(session.shop).catch(() => null);
+    return {
+      products: [],
+      vendorMap: Object.fromEntries(vendors.map((v) => [v.id, v])),
+      requireProductApproval: Boolean(settings?.requireProductApproval),
+      shopifyProductsUrl: shopAdminProductsUrl(),
+      loadError: message,
+    };
+  }
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -207,6 +230,7 @@ export default function AdminProductsPage() {
     vendorMap,
     requireProductApproval,
     shopifyProductsUrl,
+    loadError,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -219,7 +243,18 @@ export default function AdminProductsPage() {
 
   const marketplaceProducts = useMemo(
     () =>
-      (products as Array<{
+      (Array.isArray(products) ? products : []).filter(
+        (p: {
+          id?: string;
+          title?: string;
+          status?: string;
+          handle?: string;
+          featuredImage?: { url?: string; altText?: string | null } | null;
+          totalInventory?: number | null;
+          variants?: { nodes?: unknown[] };
+          metafield?: { value?: string } | null;
+        }) => Boolean(p?.metafield?.value),
+      ) as Array<{
         id: string;
         title: string;
         status: string;
@@ -228,7 +263,7 @@ export default function AdminProductsPage() {
         totalInventory?: number | null;
         variants?: { nodes?: unknown[] };
         metafield?: { value?: string } | null;
-      }>).filter((p) => p.metafield?.value),
+      }>,
     [products],
   );
 
@@ -280,6 +315,11 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
+        {loadError ? (
+          <div className="nx-banner err">
+            Could not load products from Shopify: {loadError}
+          </div>
+        ) : null}
         {actionData && "error" in actionData && actionData.error && (
           <div className="nx-banner err">{actionData.error}</div>
         )}
@@ -479,6 +519,40 @@ export default function AdminProductsPage() {
       </div>
     </s-page>
   );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  // App Bridge / session-token quirk can surface a bare HTTP status (e.g. "200").
+  if (isRouteErrorResponse(error)) {
+    return (
+      <s-page heading="Products">
+        <div style={{ padding: 24, fontFamily: "Inter, sans-serif" }}>
+          <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>Products</h1>
+          <p style={{ color: "#6d7175", marginBottom: 16 }}>
+            The Products page was interrupted
+            {error.status ? ` (status ${error.status})` : ""}. Open Products
+            again from the sidebar, or refresh the app.
+          </p>
+          <a
+            href="/app/products"
+            style={{
+              display: "inline-flex",
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "#1a1a1a",
+              color: "#fff",
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
+          >
+            Reload Products
+          </a>
+        </div>
+      </s-page>
+    );
+  }
+  return boundary.error(error);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
