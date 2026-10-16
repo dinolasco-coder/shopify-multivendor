@@ -48,7 +48,7 @@ Install the app on your development store when prompted.
 
 ## Vendor portal
 
-Vendors open `{APP_URL}/vendor/register` (or `/vendor/login`) and enter the shop domain (e.g. `your-store.myshopify.com`).
+Vendors open `{APP_URL}/vendor/register` (or `/vendor/login`). Optional Google sign-in: set `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` and add redirect URI `{APP_URL}/vendor/auth/google/callback` in Google Cloud Console.
 
 New vendors start as **pending**. Approve them under **Vendors** in the embedded admin.
 

@@ -38,6 +38,7 @@ import {
   registerAttemptKey,
 } from "../services/login-rate-limit.server";
 import { resolveVendorPortalShop } from "../services/portal-shop.server";
+import { isGoogleOAuthConfigured } from "../services/google-oauth.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const token = getVendorSessionToken(request);
@@ -47,10 +48,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const portalShop = await resolveVendorPortalShop();
+  const googleEnabled = isGoogleOAuthConfigured();
+
   if (!portalShop) {
     return {
       portalShop: null as string | null,
       registrationOpen: false,
+      googleEnabled: false,
       error:
         "Vendor portal shop is not configured. Set VENDOR_PORTAL_SHOP on the server (e.g. your-store.myshopify.com).",
     };
@@ -61,6 +65,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return {
       portalShop,
       registrationOpen: false,
+      googleEnabled,
       error:
         "Public seller registration is turned off. Ask the store admin for an invite.",
     };
@@ -69,6 +74,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     portalShop,
     registrationOpen: true,
+    googleEnabled,
     error: null as string | null,
   };
 };
@@ -149,6 +155,7 @@ export default function VendorRegister() {
   const {
     portalShop,
     registrationOpen,
+    googleEnabled,
     error: loaderError,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -182,6 +189,17 @@ export default function VendorRegister() {
               Store: {portalShop}
             </Text>
           )}
+
+          {googleEnabled && !blocked ? (
+            <Button
+              url="/vendor/auth/google?intent=register"
+              size="large"
+              fullWidth
+              disabled={busy}
+            >
+              Continue with Google
+            </Button>
+          ) : null}
 
           <Form method="post">
             <input type="hidden" name="name" value={name} />

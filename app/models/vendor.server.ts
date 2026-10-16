@@ -65,11 +65,18 @@ export async function getVendorByEmail(shop: string, email: string) {
   });
 }
 
+export async function getVendorByGoogleId(shop: string, googleId: string) {
+  return prisma.vendor.findFirst({
+    where: { shop, googleId },
+  });
+}
+
 export async function createVendor(data: {
   shop: string;
   name: string;
   email: string;
   passwordHash: string;
+  googleId?: string | null;
   commissionPercent?: number;
   commissionFlat?: number;
   status?: VendorStatus;
@@ -82,6 +89,7 @@ export async function createVendor(data: {
       slug,
       email: data.email.toLowerCase(),
       passwordHash: data.passwordHash,
+      googleId: data.googleId ?? null,
       commissionPercent: data.commissionPercent ?? 10,
       commissionFlat: data.commissionFlat ?? 0,
       status: data.status ?? "pending",
@@ -101,11 +109,13 @@ export async function updateVendor(
     bio?: string | null;
     passwordHash?: string;
     slug?: string;
+    email?: string;
     payoutMethod?: string | null;
     payoutAccountName?: string | null;
     payoutAccountNumber?: string | null;
     payoutBankBic?: string | null;
     payoutNotes?: string | null;
+    googleId?: string | null;
   },
 ) {
   return prisma.vendor.update({ where: { id }, data });

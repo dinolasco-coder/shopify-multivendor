@@ -34,6 +34,7 @@ import {
   recordFailedAttempt,
 } from "../services/login-rate-limit.server";
 import { resolveVendorPortalShop } from "../services/portal-shop.server";
+import { isGoogleOAuthConfigured } from "../services/google-oauth.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const token = getVendorSessionToken(request);
@@ -43,18 +44,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const portalShop = await resolveVendorPortalShop();
+  const url = new URL(request.url);
+  const sellerHint = url.searchParams.get("seller");
+  const queryError = url.searchParams.get("error");
+
   if (!portalShop) {
     return {
       portalShop: null as string | null,
       sellerHint: null as string | null,
+      googleEnabled: false,
       error:
+        queryError ||
         "Vendor portal shop is not configured. Set VENDOR_PORTAL_SHOP on the server (e.g. your-store.myshopify.com).",
     };
   }
 
-  const sellerHint = new URL(request.url).searchParams.get("seller");
-
-  return { portalShop, sellerHint, error: null as string | null };
+  return {
+    portalShop,
+    sellerHint,
+    googleEnabled: isGoogleOAuthConfigured(),
+    error: queryError,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -84,7 +94,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const vendor = await getVendorByEmail(portalShop, email);
-  if (!vendor || !verifyPassword(password, vendor.passwordHash)) {
+  if (
+    !vendor ||
+    !vendor.passwordHash ||
+    !verifyPassword(password, vendor.passwordHash)
+  ) {
     const afterFail = recordFailedAttempt(
       key,
       LOGIN_MAX_ATTEMPTS,
@@ -120,7 +134,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function VendorLogin() {
-  const { portalShop, sellerHint, error: loaderError } = useLoaderData<typeof loader>();
+  const {
+    portalShop,
+    sellerHint,
+    googleEnabled,
+    error: loaderError,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -152,6 +171,17 @@ export default function VendorLogin() {
               Store: {portalShop}
             </Text>
           )}
+
+          {googleEnabled && portalShop ? (
+            <Button
+              url="/vendor/auth/google"
+              size="large"
+              fullWidth
+              disabled={busy}
+            >
+              Continue with Google
+            </Button>
+          ) : null}
 
           <Form method="post">
             <input type="hidden" name="email" value={email} />
