@@ -54,11 +54,31 @@ model Vendor {
   sessions           VendorSession[]
   attributions       OrderAttribution[]
   payouts            VendorPayout[]
+  notifications      VendorNotification[]
 
   @@unique([shop, email])
   @@unique([shop, googleId])
   @@index([shop, slug])
   @@index([shop, status])
+}
+
+model VendorNotification {
+  id        String    @id @default(cuid())
+  shop      String
+  vendorId  String
+  type      String    // order_status | payment | customization
+  title     String
+  body      String?
+  href      String?
+  refKey    String?   // dedupe key e.g. order:gid / payout:id / custom:attrId
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, type, refKey])
+  @@index([vendorId, createdAt])
+  @@index([vendorId, readAt])
+  @@index([shop, vendorId])
 }
 
 model VendorSession {
