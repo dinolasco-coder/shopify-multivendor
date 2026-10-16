@@ -27,6 +27,8 @@ import {
 import {
   isPaymongoAutoPayoutsEnabled,
   isPaymongoConfigured,
+  isPaymongoTestMode,
+  listPaymongoWallets,
 } from "../services/paymongo.server";
 import { institutionLabel } from "../constants/paymongo-institutions";
 import { formatMoney } from "../utils/money";
@@ -59,11 +61,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     listPayoutsForShop(session.shop, 50),
   ]);
 
+  let paymongoWallets: Array<{
+    id: string;
+    status: string;
+    livemode: boolean;
+    accountNumber: string | null;
+    accountName: string | null;
+  }> = [];
+  let paymongoWalletError: string | null = null;
+  if (isPaymongoConfigured()) {
+    try {
+      const wallets = await listPaymongoWallets();
+      paymongoWallets = wallets.map((w) => ({
+        id: w.id,
+        status: w.status,
+        livemode: w.livemode,
+        accountNumber: w.account?.number || null,
+        accountName: w.account?.name || null,
+      }));
+    } catch (error) {
+      paymongoWalletError =
+        error instanceof Error ? error.message : "Could not list wallets.";
+    }
+  }
+
   return {
     balances,
     recentPayouts,
     paymongoConfigured: isPaymongoConfigured(),
     autoPayoutsEnabled: isPaymongoAutoPayoutsEnabled(),
+    paymongoTestMode: isPaymongoTestMode(),
+    paymongoWallets,
+    paymongoWalletError,
   };
 };
 
@@ -273,8 +302,15 @@ const styles = `
 `;
 
 export default function AdminPayoutsPage() {
-  const { balances, recentPayouts, paymongoConfigured, autoPayoutsEnabled } =
-    useLoaderData<typeof loader>();
+  const {
+    balances,
+    recentPayouts,
+    paymongoConfigured,
+    autoPayoutsEnabled,
+    paymongoTestMode,
+    paymongoWallets,
+    paymongoWalletError,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -305,12 +341,32 @@ export default function AdminPayoutsPage() {
 
         <div className={`nx-banner ${paymongoConfigured ? "info" : "err"}`}>
           {paymongoConfigured
-            ? `PayMongo connected${
+            ? `PayMongo connected (${paymongoTestMode ? "TEST sk_test_" : "LIVE sk_live_"})${
                 autoPayoutsEnabled
-                  ? " · auto-pay after sale is ON"
-                  : " · auto-pay is OFF (set PAYMONGO_AUTO_PAYOUTS=true)"
-              }. Use sk_test_ keys without account upgrade; live payouts need an enabled wallet.`
-            : "PayMongo not configured. Add PAYMONGO_SECRET_KEY (sk_test_… works for test transfers)."}
+                  ? " · auto-pay ON"
+                  : " · auto-pay OFF (set PAYMONGO_AUTO_PAYOUTS=true)"
+              }.`
+            : "PayMongo not configured. Add PAYMONGO_SECRET_KEY (sk_test_…)."}
+          {paymongoConfigured && paymongoWallets.length > 0 ? (
+            <div style={{ marginTop: 6 }}>
+              Wallet API sees:{" "}
+              {paymongoWallets
+                .map(
+                  (w) =>
+                    `${w.id.slice(0, 14)}… (${w.status}, ${
+                      w.livemode ? "live" : "test"
+                    }${w.accountNumber ? `, acct ${w.accountNumber}` : ", no acct"})`,
+                )
+                .join(" · ")}
+            </div>
+          ) : null}
+          {paymongoConfigured && paymongoWallets.length === 0 ? (
+            <div style={{ marginTop: 6 }}>
+              {paymongoWalletError
+                ? `Wallet list error: ${paymongoWalletError}`
+                : "Wallet list is empty for this API key. In PayMongo dashboard use the SAME mode (Test vs Live) → Money Movement → Wallets and activate a wallet."}
+            </div>
+          ) : null}
         </div>
 
         {actionData && "error" in actionData && actionData.error && (

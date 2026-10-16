@@ -1,6 +1,6 @@
 /**
  * PayMongo money-movement (batch transfers).
- * Uses sk_test_ for sandbox (no upgrade required) or sk_live_ after wallet enablement.
+ * Uses sk_test_ for sandbox or sk_live_ after wallet enablement.
  */
 
 export type PaymongoSourceAccount = {
@@ -31,6 +31,30 @@ export type PaymongoTransferResult = {
   raw: unknown;
 };
 
+type WalletRow = {
+  id: string;
+  livemode?: boolean;
+  status?: string;
+  is_default?: boolean;
+  account?: {
+    provider?: string;
+    account_name?: string;
+    account_number?: string;
+    currency?: string;
+  };
+  attributes?: {
+    status?: string;
+    livemode?: boolean;
+    account?: {
+      account_name?: string;
+      account_number?: string;
+      name?: string;
+      number?: string;
+      bic?: string;
+    };
+  };
+};
+
 function secretKey(): string | null {
   const key = (process.env.PAYMONGO_SECRET_KEY || "").trim();
   return key || null;
@@ -43,6 +67,11 @@ export function isPaymongoConfigured(): boolean {
 export function isPaymongoAutoPayoutsEnabled(): boolean {
   const flag = (process.env.PAYMONGO_AUTO_PAYOUTS || "").trim().toLowerCase();
   return flag === "1" || flag === "true" || flag === "yes";
+}
+
+export function isPaymongoTestMode(): boolean {
+  const key = secretKey() || "";
+  return key.startsWith("sk_test_");
 }
 
 function authHeader(): string {
@@ -82,10 +111,14 @@ async function paymongoFetch<T>(
 
   if (!res.ok) {
     const errMsg =
-      (json as { errors?: Array<{ detail?: string }> })?.errors?.[0]?.detail ||
+      (json as { errors?: Array<{ detail?: string; code?: string }> })
+        ?.errors?.[0]?.detail ||
       (json as { error?: { message?: string } })?.error?.message ||
       `PayMongo HTTP ${res.status}`;
-    const error = new Error(errMsg) as Error & { status?: number; body?: unknown };
+    const error = new Error(errMsg) as Error & {
+      status?: number;
+      body?: unknown;
+    };
     error.status = res.status;
     error.body = json;
     throw error;
@@ -97,77 +130,107 @@ async function paymongoFetch<T>(
 export function resolveSourceAccountFromEnv(): PaymongoSourceAccount | null {
   const number = (process.env.PAYMONGO_SOURCE_ACCOUNT_NUMBER || "").trim();
   const name = (process.env.PAYMONGO_SOURCE_ACCOUNT_NAME || "").trim();
-  const bic = (process.env.PAYMONGO_SOURCE_ACCOUNT_BIC || "").trim();
-  if (number && name && bic) {
+  const bic = (process.env.PAYMONGO_SOURCE_ACCOUNT_BIC || "").trim() || "PAEYPHM2XXX";
+  if (number && name) {
     return { number, name, bic };
   }
   return null;
 }
 
-type WalletListResponse = {
-  data?: Array<{
-    id: string;
-    attributes?: {
-      available_balance?: number;
-      accounts?: Array<{ number?: string; name?: string; bic?: string }>;
-    };
-    // v2 shape may nest differently
-    available_balance?: number;
-    accounts?: Array<{ number?: string; name?: string; bic?: string }>;
-  }>;
-};
-
-function accountFromWallet(wallet: {
-  attributes?: {
-    accounts?: Array<{ number?: string; name?: string; bic?: string }>;
-    account?: { number?: string; name?: string; bic?: string };
-  };
-  accounts?: Array<{ number?: string; name?: string; bic?: string }>;
-  account?: { number?: string; name?: string; bic?: string };
-}): PaymongoSourceAccount | null {
-  const accounts =
-    wallet.attributes?.accounts ||
-    wallet.accounts ||
-    (wallet.attributes?.account ? [wallet.attributes.account] : null) ||
-    (wallet.account ? [wallet.account] : null) ||
-    [];
-  const account = accounts[0];
-  if (!account?.number || !account?.name) return null;
+function accountFromWallet(wallet: WalletRow): PaymongoSourceAccount | null {
+  const acc = wallet.account || wallet.attributes?.account;
+  if (!acc) return null;
+  const number =
+    ("account_number" in acc && acc.account_number) ||
+    ("number" in acc && (acc as { number?: string }).number) ||
+    null;
+  const name =
+    ("account_name" in acc && acc.account_name) ||
+    ("name" in acc && (acc as { name?: string }).name) ||
+    null;
+  if (!number || !name) return null;
   return {
-    number: String(account.number),
-    name: String(account.name),
-    // PayMongo wallet BIC is always this value
-    bic: String(account.bic || "PAEYPHM2XXX"),
+    number: String(number).trim(),
+    name: String(name).trim(),
+    bic: String(
+      ("bic" in acc && (acc as { bic?: string }).bic) || "PAEYPHM2XXX",
+    ),
   };
 }
 
-/** Prefer env source account; else first account on configured (or first) wallet. */
+/** List wallets for the current secret key (test key → test wallets only). */
+export async function listPaymongoWallets(): Promise<
+  Array<{
+    id: string;
+    status: string;
+    livemode: boolean;
+    account: PaymongoSourceAccount | null;
+  }>
+> {
+  // Prefer activated; if empty, try without filter (some accounts only list default).
+  const paths = [
+    "/v2/wallets?status=activated&fields=account&fields=balance",
+    "/v2/wallets?fields=account&fields=balance",
+    "/v2/wallets",
+  ];
+
+  let list: WalletRow[] = [];
+  for (const path of paths) {
+    try {
+      const res = await paymongoFetch<{ data?: WalletRow[] }>(path);
+      list = res.data || [];
+      if (list.length) break;
+    } catch {
+      // try next shape
+    }
+  }
+
+  return list.map((w) => ({
+    id: w.id,
+    status: w.status || w.attributes?.status || "unknown",
+    livemode: Boolean(w.livemode ?? w.attributes?.livemode),
+    account: accountFromWallet(w),
+  }));
+}
+
+/**
+ * Resolve source account:
+ * 1) Wallet returned by PayMongo API for this key (most reliable)
+ * 2) Env PAYMONGO_SOURCE_ACCOUNT_* fallback
+ */
 export async function resolveSourceAccount(): Promise<PaymongoSourceAccount> {
+  const wantId = (process.env.PAYMONGO_SOURCE_WALLET_ID || "").trim();
+  const testMode = isPaymongoTestMode();
+
+  try {
+    const wallets = await listPaymongoWallets();
+    const preferred =
+      (wantId ? wallets.find((w) => w.id === wantId) : null) ||
+      wallets.find(
+        (w) =>
+          w.account &&
+          w.livemode === !testMode &&
+          w.status !== "deactivated",
+      ) ||
+      wallets.find((w) => w.account && w.livemode === !testMode) ||
+      wallets.find((w) => w.account && w.status !== "deactivated") ||
+      wallets.find((w) => w.account);
+
+    if (preferred?.account) {
+      return preferred.account;
+    }
+  } catch (error) {
+    console.error("PayMongo list wallets failed", error);
+  }
+
   const fromEnv = resolveSourceAccountFromEnv();
   if (fromEnv) return fromEnv;
 
-  // Include account details — list without fields often returns empty accounts.
-  const wallets = await paymongoFetch<WalletListResponse>(
-    "/v2/wallets?fields[]=account&fields[]=balance",
+  throw new Error(
+    testMode
+      ? "No PayMongo TEST wallet found for sk_test_. In the dashboard switch to Test mode → Money Movement → Wallets. If empty, activate a wallet first."
+      : "No PayMongo LIVE wallet found. Activate/enable a wallet, then retry.",
   );
-  const wantId = (process.env.PAYMONGO_SOURCE_WALLET_ID || "").trim();
-  const list = wallets.data || [];
-  const wallet =
-    (wantId ? list.find((w) => w.id === wantId) : null) || list[0];
-  if (!wallet) {
-    throw new Error(
-      "No PayMongo wallet found. In Railway set PAYMONGO_SOURCE_ACCOUNT_NUMBER, PAYMONGO_SOURCE_ACCOUNT_NAME, and PAYMONGO_SOURCE_ACCOUNT_BIC=PAEYPHM2XXX (from PayMongo → Money Movement → Wallets).",
-    );
-  }
-
-  const account = accountFromWallet(wallet);
-  if (!account) {
-    throw new Error(
-      "PayMongo wallet has no source account. Set PAYMONGO_SOURCE_ACCOUNT_NUMBER, PAYMONGO_SOURCE_ACCOUNT_NAME, and PAYMONGO_SOURCE_ACCOUNT_BIC=PAEYPHM2XXX on Railway.",
-    );
-  }
-
-  return account;
 }
 
 type BatchTransferResponse = {
@@ -202,7 +265,11 @@ export async function createBatchTransfer(
         purpose: transfer.purpose || "Disbursement",
         description: transfer.description || "Seller payout",
         reference_number: transfer.referenceNumber,
-        source_account: source,
+        source_account: {
+          number: source.number,
+          name: source.name,
+          bic: source.bic || "PAEYPHM2XXX",
+        },
         destination_account: {
           number: transfer.destination.number,
           name: transfer.destination.name,
@@ -214,25 +281,42 @@ export async function createBatchTransfer(
     ],
   };
 
-  const json = await paymongoFetch<BatchTransferResponse>("/v2/batch_transfers", {
-    method: "POST",
-    body: JSON.stringify(body),
-    idempotencyKey: opts?.idempotencyKey,
-  });
+  try {
+    const json = await paymongoFetch<BatchTransferResponse>(
+      "/v2/batch_transfers",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        idempotencyKey: opts?.idempotencyKey,
+      },
+    );
 
-  const batchId = json.data?.id || "";
-  const first = json.data?.transfers?.[0];
-  const transferId = first?.id || "";
-  if (!batchId || !transferId) {
-    throw new Error("PayMongo batch transfer response missing ids.");
+    const batchId = json.data?.id || "";
+    const first = json.data?.transfers?.[0];
+    const transferId = first?.id || "";
+    if (!batchId || !transferId) {
+      throw new Error("PayMongo batch transfer response missing ids.");
+    }
+
+    return {
+      batchId,
+      transferId,
+      status: first?.status || "pending",
+      raw: json,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/source account|wallet by params|GetByParams/i.test(msg)) {
+      const mode = isPaymongoTestMode() ? "TEST (sk_test_)" : "LIVE (sk_live_)";
+      throw new Error(
+        `${msg} — PayMongo could not match source wallet for ${mode}. ` +
+          `Open dashboard in the SAME mode → Wallets, confirm wallet is activated (not closed-loop), ` +
+          `and that Railway PAYMONGO_SECRET_KEY matches that mode. ` +
+          `Using source ${source.number} / ${source.name}.`,
+      );
+    }
+    throw error;
   }
-
-  return {
-    batchId,
-    transferId,
-    status: first?.status || "pending",
-    raw: json,
-  };
 }
 
 export function pesosToCentavos(amount: number): number {
