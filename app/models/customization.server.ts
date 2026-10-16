@@ -43,6 +43,15 @@ export async function listCustomizationRequestsForVendor(vendorId: string) {
   });
 }
 
+/** Admin view — read-only list for the shop. */
+export async function listCustomizationRequestsForShop(shop: string) {
+  return prisma.customizationRequest.findMany({
+    where: { shop },
+    include: { vendor: { select: { id: true, name: true, email: true, status: true } } },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 export async function getCustomizationRequestForVendor(
   id: string,
   vendorId: string,

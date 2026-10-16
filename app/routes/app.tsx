@@ -41,6 +41,7 @@ export default function App() {
           <s-link href="/app/orders">Orders</s-link>
           <s-link href="/app/vendors">Sellers</s-link>
           <s-link href="/app/products">Products</s-link>
+          <s-link href="/app/customizations">Customizations</s-link>
           <s-link href="/app/payouts">Payouts</s-link>
           <s-link href="/app/reports">Analytics</s-link>
           <s-link href="/app/settings">Settings</s-link>
