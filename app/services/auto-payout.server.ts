@@ -106,19 +106,35 @@ export async function sendPaymongoPayout(opts: {
       { idempotencyKey: payout.id },
     );
 
+    const status =
+      result.status === "succeeded" || result.status === "success"
+        ? "succeeded"
+        : result.status === "failed"
+          ? "failed"
+          : "pending";
+
     const updated = await prisma.vendorPayout.update({
       where: { id: payout.id },
       data: {
         providerBatchId: result.batchId,
         providerTransferId: result.transferId,
-        status:
-          result.status === "succeeded" || result.status === "success"
-            ? "succeeded"
-            : result.status === "failed"
-              ? "failed"
-              : "pending",
+        status,
       },
     });
+
+    try {
+      const { notifyPayment } = await import("../models/notifications.server");
+      const { formatMoney } = await import("../utils/money");
+      await notifyPayment({
+        shop: updated.shop,
+        vendorId: updated.vendorId,
+        amountLabel: formatMoney(updated.amount, updated.currency),
+        payoutId: updated.id,
+        statusLabel: status,
+      });
+    } catch (notifyError) {
+      console.error("notify paymongo payout failed", notifyError);
+    }
 
     return { payout: updated, skipped: false as const };
   } catch (error) {
@@ -131,6 +147,19 @@ export async function sendPaymongoPayout(opts: {
         errorMessage: message.slice(0, 500),
       },
     });
+    try {
+      const { notifyPayment } = await import("../models/notifications.server");
+      const { formatMoney } = await import("../utils/money");
+      await notifyPayment({
+        shop: updated.shop,
+        vendorId: updated.vendorId,
+        amountLabel: formatMoney(updated.amount, updated.currency),
+        payoutId: updated.id,
+        statusLabel: "failed",
+      });
+    } catch (notifyError) {
+      console.error("notify paymongo fail failed", notifyError);
+    }
     return { payout: updated, skipped: false as const, error: message };
   }
 }
@@ -241,7 +270,7 @@ export async function applyPaymongoTransferStatus(payload: {
     status = "pending";
   }
 
-  return prisma.vendorPayout.update({
+  const updated = await prisma.vendorPayout.update({
     where: { id: payout.id },
     data: {
       status,
@@ -256,4 +285,20 @@ export async function applyPaymongoTransferStatus(payload: {
             : payout.errorMessage,
     },
   });
+
+  try {
+    const { notifyPayment } = await import("../models/notifications.server");
+    const { formatMoney } = await import("../utils/money");
+    await notifyPayment({
+      shop: updated.shop,
+      vendorId: updated.vendorId,
+      amountLabel: formatMoney(updated.amount, updated.currency),
+      payoutId: updated.id,
+      statusLabel: status,
+    });
+  } catch (notifyError) {
+    console.error("notify paymongo webhook status failed", notifyError);
+  }
+
+  return updated;
 }
