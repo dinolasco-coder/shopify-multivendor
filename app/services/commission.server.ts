@@ -138,23 +138,6 @@ export async function attributeOrderFromWebhook(
 
   if (attributions.length) {
     await upsertOrderAttributions(attributions);
-    const { notifyOrderStatus } = await import(
-      "../models/notifications.server"
-    );
-    for (const attr of attributions) {
-      try {
-        await notifyOrderStatus({
-          shop,
-          vendorId: attr.vendorId,
-          orderName: attr.shopifyOrderName || "Order",
-          orderId: attr.shopifyOrderId,
-          statusLabel: "New order",
-          refSuffix: "new",
-        });
-      } catch (error) {
-        console.error("notify new order failed", attr.vendorId, error);
-      }
-    }
   }
 }
 

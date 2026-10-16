@@ -104,30 +104,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             /* ignore */
           }
 
-          const orderName =
-            attr.shopifyOrderName || order?.name || attr.shopifyOrderId;
           designs.push({
             attributionId: attr.id,
-            orderName,
+            orderName:
+              attr.shopifyOrderName || order?.name || attr.shopifyOrderId,
             orderId: attr.shopifyOrderId,
             createdAt: new Date(attr.createdAt).toISOString(),
             productTitle,
             note,
             imageUrls,
           });
-          try {
-            const { notifyCustomization } = await import(
-              "../models/notifications.server"
-            );
-            await notifyCustomization({
-              shop: vendor.shop,
-              vendorId: vendor.id,
-              orderName,
-              attributionId: attr.id,
-            });
-          } catch (notifyError) {
-            console.error("notify customization failed", notifyError);
-          }
         } catch (error) {
           console.error("customized note fetch failed", attr.id, error);
         }

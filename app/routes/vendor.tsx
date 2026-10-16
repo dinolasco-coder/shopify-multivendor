@@ -32,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     path.startsWith("/vendor/auth/") ||
     path.startsWith("/vendor/u/")
   ) {
-    return { vendor: null, publicRoute: true, unreadNotifications: 0 };
+    return { vendor: null, publicRoute: true };
   }
 
   const result = await authenticateVendor(request);
@@ -56,23 +56,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw redirect("/vendor/pending");
   }
 
-  let unreadNotifications = 0;
-  if (result.vendor.status === "approved") {
-    try {
-      const { countUnreadNotifications } = await import(
-        "../models/notifications.server"
-      );
-      unreadNotifications = await countUnreadNotifications(result.vendor.id);
-    } catch {
-      unreadNotifications = 0;
-    }
-  }
-
   return {
     vendor: result.vendor,
     publicRoute: false,
     shopLabel: result.vendor.shop.replace(/\.myshopify\.com$/i, ""),
-    unreadNotifications,
   };
 };
 
@@ -82,46 +69,20 @@ function NavLink({
   active,
   onNavigate,
   nested,
-  badge,
 }: {
   to: string;
   label: string;
   active: boolean;
   onNavigate?: () => void;
   nested?: boolean;
-  badge?: number;
 }) {
   return (
     <Link
       to={to}
       className={`${nested ? "sx-nav__sublink" : ""}${active ? " is-active" : ""}`.trim()}
       onClick={onNavigate}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 8,
-      }}
     >
-      <span>{label}</span>
-      {badge && badge > 0 ? (
-        <span
-          style={{
-            minWidth: 18,
-            height: 18,
-            padding: "0 5px",
-            borderRadius: 999,
-            background: "#2c6ecb",
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: 700,
-            lineHeight: "18px",
-            textAlign: "center",
-          }}
-        >
-          {badge > 99 ? "99+" : badge}
-        </span>
-      ) : null}
+      {label}
     </Link>
   );
 }
@@ -270,13 +231,6 @@ export default function VendorLayout() {
               label="Home"
               active={path === "/vendor"}
               onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/notifications"
-              label="Notifications"
-              active={path.startsWith("/vendor/notifications")}
-              onNavigate={closeMenu}
-              badge={data.unreadNotifications || 0}
             />
             <NavLink
               to="/vendor/orders"

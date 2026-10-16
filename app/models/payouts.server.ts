@@ -26,7 +26,7 @@ export async function createVendorPayout(data: {
   providerBatchId?: string | null;
   errorMessage?: string | null;
 }) {
-  const payout = await prisma.vendorPayout.create({
+  return prisma.vendorPayout.create({
     data: {
       shop: data.shop,
       vendorId: data.vendorId,
@@ -43,22 +43,6 @@ export async function createVendorPayout(data: {
       errorMessage: data.errorMessage ?? null,
     },
   });
-
-  try {
-    const { notifyPayment } = await import("./notifications.server");
-    const { formatMoney } = await import("../utils/money");
-    await notifyPayment({
-      shop: payout.shop,
-      vendorId: payout.vendorId,
-      amountLabel: formatMoney(payout.amount, payout.currency),
-      payoutId: payout.id,
-      statusLabel: payout.status || "recorded",
-    });
-  } catch (error) {
-    console.error("notify payment failed", error);
-  }
-
-  return payout;
 }
 
 /** Record outstanding balances for every seller owed money. */

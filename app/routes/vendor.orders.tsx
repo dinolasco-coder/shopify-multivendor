@@ -465,21 +465,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           : notifyCustomer && !result.customerEmail
             ? `Cancelled ${label}, but this order has no customer email so Shopify could not notify them.`
             : `Cancelled ${label}.`;
-      try {
-        const { notifyOrderStatus } = await import(
-          "../models/notifications.server"
-        );
-        await notifyOrderStatus({
-          shop: vendor.shop,
-          vendorId: vendor.id,
-          orderName: attribution.shopifyOrderName || "Order",
-          orderId: attribution.shopifyOrderId,
-          statusLabel: "Cancelled",
-          refSuffix: "cancelled",
-        });
-      } catch (notifyError) {
-        console.error("notify cancel failed", notifyError);
-      }
       return {
         ok: true,
         message,
@@ -539,21 +524,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       trackingUrl: trackingUrl || null,
       notifyCustomer: true,
     });
-    try {
-      const { notifyOrderStatus } = await import(
-        "../models/notifications.server"
-      );
-      await notifyOrderStatus({
-        shop: vendor.shop,
-        vendorId: vendor.id,
-        orderName: attribution.shopifyOrderName || "Order",
-        orderId: attribution.shopifyOrderId,
-        statusLabel: "Fulfilled",
-        refSuffix: "fulfilled",
-      });
-    } catch (notifyError) {
-      console.error("notify fulfill failed", notifyError);
-    }
     return {
       ok: true,
       message: `Marked ${attribution.shopifyOrderName || "order"} as fulfilled.`,
