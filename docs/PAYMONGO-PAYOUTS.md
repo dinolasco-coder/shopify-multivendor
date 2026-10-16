@@ -14,15 +14,15 @@ PAYMONGO_AUTO_PAYOUTS=true
 SHOPIFY_APP_URL=https://your-app.up.railway.app
 ```
 
-4. Optionally set source wallet / account (from PayMongo Money Movement → Wallets):
+4. **Required if you see “No PayMongo wallet found”** — set source account from PayMongo → **Money Movement → Wallets** (account number + name). BIC is always `PAEYPHM2XXX` for PayMongo wallets:
 
 ```env
-PAYMONGO_SOURCE_WALLET_ID=wallet_…
-# or
-PAYMONGO_SOURCE_ACCOUNT_NUMBER=…
-PAYMONGO_SOURCE_ACCOUNT_NAME=…
+PAYMONGO_SOURCE_ACCOUNT_NUMBER=your_wallet_account_number
+PAYMONGO_SOURCE_ACCOUNT_NAME=Your Business Name
 PAYMONGO_SOURCE_ACCOUNT_BIC=PAEYPHM2XXX
 ```
+
+Or set `PAYMONGO_SOURCE_WALLET_ID=wallet_…` if the wallet list API returns wallets for your key.
 
 5. Redeploy. In **Admin → Payouts** you should see “PayMongo connected”.
 6. Sellers fill **Payouts** (account name, number, bank/e-wallet).

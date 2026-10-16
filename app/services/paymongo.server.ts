@@ -117,36 +117,57 @@ type WalletListResponse = {
   }>;
 };
 
+function accountFromWallet(wallet: {
+  attributes?: {
+    accounts?: Array<{ number?: string; name?: string; bic?: string }>;
+    account?: { number?: string; name?: string; bic?: string };
+  };
+  accounts?: Array<{ number?: string; name?: string; bic?: string }>;
+  account?: { number?: string; name?: string; bic?: string };
+}): PaymongoSourceAccount | null {
+  const accounts =
+    wallet.attributes?.accounts ||
+    wallet.accounts ||
+    (wallet.attributes?.account ? [wallet.attributes.account] : null) ||
+    (wallet.account ? [wallet.account] : null) ||
+    [];
+  const account = accounts[0];
+  if (!account?.number || !account?.name) return null;
+  return {
+    number: String(account.number),
+    name: String(account.name),
+    // PayMongo wallet BIC is always this value
+    bic: String(account.bic || "PAEYPHM2XXX"),
+  };
+}
+
 /** Prefer env source account; else first account on configured (or first) wallet. */
 export async function resolveSourceAccount(): Promise<PaymongoSourceAccount> {
   const fromEnv = resolveSourceAccountFromEnv();
   if (fromEnv) return fromEnv;
 
-  const wallets = await paymongoFetch<WalletListResponse>("/v2/wallets");
+  // Include account details — list without fields often returns empty accounts.
+  const wallets = await paymongoFetch<WalletListResponse>(
+    "/v2/wallets?fields[]=account&fields[]=balance",
+  );
   const wantId = (process.env.PAYMONGO_SOURCE_WALLET_ID || "").trim();
   const list = wallets.data || [];
   const wallet =
     (wantId ? list.find((w) => w.id === wantId) : null) || list[0];
   if (!wallet) {
     throw new Error(
-      "No PayMongo wallet found. Set PAYMONGO_SOURCE_ACCOUNT_* or PAYMONGO_SOURCE_WALLET_ID.",
+      "No PayMongo wallet found. In Railway set PAYMONGO_SOURCE_ACCOUNT_NUMBER, PAYMONGO_SOURCE_ACCOUNT_NAME, and PAYMONGO_SOURCE_ACCOUNT_BIC=PAEYPHM2XXX (from PayMongo → Money Movement → Wallets).",
     );
   }
 
-  const accounts =
-    wallet.attributes?.accounts || wallet.accounts || [];
-  const account = accounts[0];
-  if (!account?.number || !account?.name || !account?.bic) {
+  const account = accountFromWallet(wallet);
+  if (!account) {
     throw new Error(
-      "PayMongo wallet has no source account. Set PAYMONGO_SOURCE_ACCOUNT_NUMBER/NAME/BIC.",
+      "PayMongo wallet has no source account. Set PAYMONGO_SOURCE_ACCOUNT_NUMBER, PAYMONGO_SOURCE_ACCOUNT_NAME, and PAYMONGO_SOURCE_ACCOUNT_BIC=PAEYPHM2XXX on Railway.",
     );
   }
 
-  return {
-    number: String(account.number),
-    name: String(account.name),
-    bic: String(account.bic),
-  };
+  return account;
 }
 
 type BatchTransferResponse = {
