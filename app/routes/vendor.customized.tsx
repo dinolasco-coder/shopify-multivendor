@@ -18,8 +18,14 @@ import {
 } from "../services/products.server";
 import { fromProductPathId, toProductPathId } from "../utils/product-id";
 import { formatMoney } from "../utils/money";
+import {
+  listCustomizationRequestsForVendor,
+  updateCustomizationRequest,
+  upsertCustomizationRequest,
+} from "../models/customization.server";
 
 type CustomDesign = {
+  id: string;
   attributionId: string;
   orderName: string;
   orderId: string;
@@ -27,6 +33,8 @@ type CustomDesign = {
   productTitle: string;
   note: string;
   imageUrls: string[];
+  status: string;
+  sellerNotes: string;
 };
 
 type AiProduct = {
@@ -44,7 +52,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { vendor } = result;
 
   const attributions = await listAttributionsForVendor(vendor.id);
-  const designs: CustomDesign[] = [];
   let aiProducts: AiProduct[] = [];
 
   try {
@@ -106,15 +113,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
           const orderName =
             attr.shopifyOrderName || order?.name || attr.shopifyOrderId;
-          designs.push({
+
+          await upsertCustomizationRequest({
+            shop: vendor.shop,
+            vendorId: vendor.id,
             attributionId: attr.id,
+            shopifyOrderId: attr.shopifyOrderId,
             orderName,
-            orderId: attr.shopifyOrderId,
-            createdAt: new Date(attr.createdAt).toISOString(),
             productTitle,
-            note,
+            customerNote: note,
             imageUrls,
           });
+
           try {
             const { notifyCustomization } = await import(
               "../models/notifications.server"
@@ -137,10 +147,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed loading AI customization page", error);
   }
 
-  designs.sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  const stored = await listCustomizationRequestsForVendor(vendor.id);
+  const designs: CustomDesign[] = stored.map((row) => {
+    let imageUrls: string[] = [];
+    try {
+      imageUrls = JSON.parse(row.imageUrlsJson || "[]") as string[];
+    } catch {
+      imageUrls = [];
+    }
+    return {
+      id: row.id,
+      attributionId: row.attributionId,
+      orderName: row.orderName || row.shopifyOrderId,
+      orderId: row.shopifyOrderId,
+      createdAt: row.createdAt.toISOString(),
+      productTitle: row.productTitle || "Product",
+      note: row.customerNote || "",
+      imageUrls,
+      status: row.status,
+      sellerNotes: row.sellerNotes || "",
+    };
+  });
 
   return {
     designs,
@@ -155,7 +182,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { vendor } = result;
 
   const form = await request.formData();
-  if (String(form.get("intent") || "") !== "saveFee") {
+  const intent = String(form.get("intent") || "");
+
+  if (
+    intent === "acceptRequest" ||
+    intent === "cancelRequest" ||
+    intent === "updateRequest"
+  ) {
+    const requestId = String(form.get("requestId") || "");
+    if (!requestId) return { error: "Missing customization request." };
+
+    if (intent === "acceptRequest") {
+      const updated = await updateCustomizationRequest(requestId, vendor.id, {
+        status: "accepted",
+      });
+      if (!updated) return { error: "Request not found." };
+      return {
+        ok: true,
+        message: `Accepted customization for ${updated.orderName || "order"}.`,
+      };
+    }
+
+    if (intent === "cancelRequest") {
+      const updated = await updateCustomizationRequest(requestId, vendor.id, {
+        status: "cancelled",
+      });
+      if (!updated) return { error: "Request not found." };
+      return {
+        ok: true,
+        message: `Cancelled customization for ${updated.orderName || "order"}.`,
+      };
+    }
+
+    const sellerNotes = String(form.get("sellerNotes") || "");
+    const updated = await updateCustomizationRequest(requestId, vendor.id, {
+      sellerNotes,
+    });
+    if (!updated) return { error: "Request not found." };
+    return {
+      ok: true,
+      message: `Updated notes for ${updated.orderName || "order"}.`,
+    };
+  }
+
+  if (intent !== "saveFee") {
     return { error: "Unknown action." };
   }
 
@@ -201,6 +271,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 };
+
+function statusTone(status: string) {
+  if (status === "accepted") return "ok";
+  if (status === "cancelled") return "bad";
+  return "warn";
+}
+
+function statusLabel(status: string) {
+  if (status === "accepted") return "Accepted";
+  if (status === "cancelled") return "Cancelled";
+  return "Pending";
+}
 
 export default function VendorAiCustomization() {
   const { designs, aiProducts, withFeeCount } =
@@ -295,17 +377,39 @@ export default function VendorAiCustomization() {
               >
                 {designs.map((d) => (
                   <div
-                    key={d.attributionId}
+                    key={d.id}
                     className="sx-panel"
                     style={{ marginBottom: 0, padding: 14 }}
                   >
-                    <p className="sx-primary" style={{ margin: "0 0 4px" }}>
-                      {d.orderName}
-                    </p>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        alignItems: "flex-start",
+                        marginBottom: 4,
+                      }}
+                    >
+                      <p className="sx-primary" style={{ margin: 0 }}>
+                        {d.orderName}
+                      </p>
+                      <span className={`sx-stock sx-stock--${statusTone(d.status)}`}>
+                        {statusLabel(d.status)}
+                      </span>
+                    </div>
                     <p className="sx-secondary" style={{ margin: "0 0 10px" }}>
                       {d.productTitle} ·{" "}
                       {new Date(d.createdAt).toLocaleDateString()}
                     </p>
+                    {d.note ? (
+                      <p
+                        className="sx-secondary"
+                        style={{ margin: "0 0 10px", whiteSpace: "pre-wrap" }}
+                      >
+                        {d.note.slice(0, 180)}
+                        {d.note.length > 180 ? "…" : ""}
+                      </p>
+                    ) : null}
                     <div
                       style={{
                         display: "flex",
@@ -353,7 +457,130 @@ export default function VendorAiCustomization() {
                         </a>
                       ))}
                     </div>
-                    <div style={{ marginTop: 12 }}>
+
+                    <Form method="post" style={{ marginTop: 12 }}>
+                      <input type="hidden" name="requestId" value={d.id} />
+                      <input type="hidden" name="intent" value="updateRequest" />
+                      <label
+                        style={{
+                          display: "block",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          marginBottom: 4,
+                        }}
+                      >
+                        Seller notes
+                      </label>
+                      <textarea
+                        name="sellerNotes"
+                        defaultValue={d.sellerNotes}
+                        rows={2}
+                        placeholder="Update details / notes for this request"
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          border: "1px solid #c9cccf",
+                          borderRadius: 8,
+                          padding: "8px 10px",
+                          fontSize: 13,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          marginTop: 10,
+                        }}
+                      >
+                        <button
+                          className="sx-btn"
+                          type="submit"
+                          disabled={busy || d.status === "cancelled"}
+                        >
+                          Save updates
+                        </button>
+                      </div>
+                    </Form>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        marginTop: 10,
+                      }}
+                    >
+                      {d.status === "pending" ? (
+                        <>
+                          <Form method="post">
+                            <input type="hidden" name="requestId" value={d.id} />
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="acceptRequest"
+                            />
+                            <button
+                              className="sx-btn sx-btn--primary"
+                              type="submit"
+                              disabled={busy}
+                            >
+                              Accept
+                            </button>
+                          </Form>
+                          <Form method="post">
+                            <input type="hidden" name="requestId" value={d.id} />
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="cancelRequest"
+                            />
+                            <button
+                              className="sx-btn"
+                              type="submit"
+                              disabled={busy}
+                              onClick={(e) => {
+                                if (
+                                  !window.confirm(
+                                    `Cancel customization for ${d.orderName}?`,
+                                  )
+                                ) {
+                                  e.preventDefault();
+                                }
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </Form>
+                        </>
+                      ) : null}
+                      {d.status === "accepted" ? (
+                        <Form method="post">
+                          <input type="hidden" name="requestId" value={d.id} />
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="cancelRequest"
+                          />
+                          <button
+                            className="sx-btn"
+                            type="submit"
+                            disabled={busy}
+                            onClick={(e) => {
+                              if (
+                                !window.confirm(
+                                  `Cancel customization for ${d.orderName}?`,
+                                )
+                              ) {
+                                e.preventDefault();
+                              }
+                            }}
+                          >
+                            Cancel request
+                          </button>
+                        </Form>
+                      ) : null}
                       <Link
                         className="sx-btn"
                         to="/vendor/orders"

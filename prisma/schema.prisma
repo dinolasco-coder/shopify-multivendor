@@ -55,11 +55,32 @@ model Vendor {
   attributions       OrderAttribution[]
   payouts            VendorPayout[]
   notifications      VendorNotification[]
+  customizations     CustomizationRequest[]
 
   @@unique([shop, email])
   @@unique([shop, googleId])
   @@index([shop, slug])
   @@index([shop, status])
+}
+
+model CustomizationRequest {
+  id              String   @id @default(cuid())
+  shop            String
+  vendorId        String
+  attributionId   String   @unique
+  shopifyOrderId  String
+  orderName       String?
+  productTitle    String?
+  customerNote    String?
+  imageUrlsJson   String   @default("[]")
+  status          String   @default("pending") // pending | accepted | cancelled
+  sellerNotes     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  vendor          Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, status])
+  @@index([shop, vendorId])
 }
 
 model VendorNotification {
