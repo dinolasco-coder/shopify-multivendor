@@ -340,8 +340,8 @@ export default function VendorAiCustomization() {
         </div>
       </div>
 
-      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "14px 16px" }}>
+      <div className="sx-panel sx-panel--flush">
+        <div className="sx-panel__toolbar">
           <div className="sx-tabs">
             <button
               type="button"
@@ -367,20 +367,9 @@ export default function VendorAiCustomization() {
               link in the notes, it shows up here.
             </div>
           ) : (
-            <div style={{ padding: "0 16px 16px" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                  gap: 16,
-                }}
-              >
+            <div className="sx-cards">
                 {designs.map((d) => (
-                  <div
-                    key={d.id}
-                    className="sx-panel"
-                    style={{ marginBottom: 0, padding: 14 }}
-                  >
+                  <div key={d.id} className="sx-panel">
                     <div
                       style={{
                         display: "flex",
@@ -591,7 +580,6 @@ export default function VendorAiCustomization() {
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
           )
         ) : (

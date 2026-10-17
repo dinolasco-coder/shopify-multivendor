@@ -67,36 +67,14 @@ export default function VendorDashboard() {
 
   return (
     <div>
-      <h1 className="sx-title">Welcome {vendor.name}!</h1>
-      <p className="sx-sub">
-        Manage your products, orders, and payouts from one place.
-      </p>
-
-      <div className="sx-panel">
-        <h2 className="sx-panel__title">What do you want to do?</h2>
-        <div className="sx-actions" style={{ marginTop: 12 }}>
-          <Link className="sx-btn sx-btn--primary sx-btn--lg" to="/vendor/products/new">
-            + Add a product
-          </Link>
-          <Link className="sx-btn sx-btn--lg" to="/vendor/products">
-            My products
-          </Link>
-          <Link className="sx-btn sx-btn--lg" to="/vendor/inventory">
-            Inventory
-          </Link>
-          <Link className="sx-btn sx-btn--lg" to="/vendor/orders">
-            My orders
-          </Link>
-          <Link className="sx-btn sx-btn--lg" to="/vendor/customers">
-            Customers
-          </Link>
-          <Link className="sx-btn sx-btn--lg" to="/vendor/earnings">
-            My payouts
-          </Link>
+      <div className="sx-page-head">
+        <div>
+          <h1 className="sx-title">Home</h1>
+          <p className="sx-sub">Welcome, {vendor.name}.</p>
         </div>
-        <p className="sx-secondary">
-          Tip: on Add a product you can take a photo, then type the name and price.
-        </p>
+        <Link className="sx-btn sx-btn--primary" to="/vendor/products/new">
+          Add a product
+        </Link>
       </div>
 
       <div className="sx-metrics">

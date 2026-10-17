@@ -96,31 +96,10 @@ function NavLink({
       to={to}
       className={`${nested ? "sx-nav__sublink" : ""}${active ? " is-active" : ""}`.trim()}
       onClick={onNavigate}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 8,
-      }}
     >
       <span>{label}</span>
       {badge && badge > 0 ? (
-        <span
-          style={{
-            minWidth: 18,
-            height: 18,
-            padding: "0 5px",
-            borderRadius: 999,
-            background: "#2c6ecb",
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: 700,
-            lineHeight: "18px",
-            textAlign: "center",
-          }}
-        >
-          {badge > 99 ? "99+" : badge}
-        </span>
+        <span className="sx-nav__badge">{badge > 99 ? "99+" : badge}</span>
       ) : null}
     </Link>
   );
@@ -238,7 +217,7 @@ export default function VendorLayout() {
       <style
         dangerouslySetInnerHTML={{
           __html: `${vendorPortalStyles}
-            html, body { margin: 0; background: #f6f6f7; }
+            html, body { margin: 0; background: #f3f4f6; }
           `,
         }}
       />
@@ -265,63 +244,72 @@ export default function VendorLayout() {
             </button>
           </div>
           <nav className="sx-nav">
-            <NavLink
-              to="/vendor"
-              label="Home"
-              active={path === "/vendor"}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/notifications"
-              label="Notifications"
-              active={path.startsWith("/vendor/notifications")}
-              onNavigate={closeMenu}
-              badge={data.unreadNotifications || 0}
-            />
-            <NavLink
-              to="/vendor/orders"
-              label="Orders"
-              active={path.startsWith("/vendor/orders")}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/customers"
-              label="Customers"
-              active={path.startsWith("/vendor/customers")}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/customized"
-              label="AI custom"
-              active={path.startsWith("/vendor/customized")}
-              onNavigate={closeMenu}
-            />
-            <ProductsNavDropdown path={path} onNavigate={closeMenu} />
-            <NavLink
-              to="/vendor/earnings"
-              label="Payouts"
-              active={path.startsWith("/vendor/earnings")}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/sales"
-              label="Sales"
-              active={path.startsWith("/vendor/sales")}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/reports"
-              label="Analytics"
-              active={path.startsWith("/vendor/reports")}
-              onNavigate={closeMenu}
-            />
-            <NavLink
-              to="/vendor/account"
-              label="Account"
-              active={path.startsWith("/vendor/account")}
-              onNavigate={closeMenu}
-            />
+            <div className="sx-nav__section">
+              <p className="sx-nav__label">Main</p>
+              <NavLink
+                to="/vendor"
+                label="Home"
+                active={path === "/vendor"}
+                onNavigate={closeMenu}
+              />
+              <NavLink
+                to="/vendor/orders"
+                label="Orders"
+                active={path.startsWith("/vendor/orders")}
+                onNavigate={closeMenu}
+              />
+              <NavLink
+                to="/vendor/notifications"
+                label="Notifications"
+                active={path.startsWith("/vendor/notifications")}
+                onNavigate={closeMenu}
+                badge={data.unreadNotifications || 0}
+              />
+            </div>
+            <div className="sx-nav__section">
+              <p className="sx-nav__label">Shop</p>
+              <ProductsNavDropdown path={path} onNavigate={closeMenu} />
+              <NavLink
+                to="/vendor/customers"
+                label="Customers"
+                active={path.startsWith("/vendor/customers")}
+                onNavigate={closeMenu}
+              />
+              <NavLink
+                to="/vendor/customized"
+                label="AI custom"
+                active={path.startsWith("/vendor/customized")}
+                onNavigate={closeMenu}
+              />
+            </div>
+            <div className="sx-nav__section">
+              <p className="sx-nav__label">Money</p>
+              <NavLink
+                to="/vendor/earnings"
+                label="Payouts"
+                active={path.startsWith("/vendor/earnings")}
+                onNavigate={closeMenu}
+              />
+              <NavLink
+                to="/vendor/sales"
+                label="Sales"
+                active={path.startsWith("/vendor/sales")}
+                onNavigate={closeMenu}
+              />
+              <NavLink
+                to="/vendor/reports"
+                label="Analytics"
+                active={path.startsWith("/vendor/reports")}
+                onNavigate={closeMenu}
+              />
+            </div>
             <div className="sx-nav__bottom">
+              <NavLink
+                to="/vendor/account"
+                label="Account"
+                active={path.startsWith("/vendor/account")}
+                onNavigate={closeMenu}
+              />
               <Link to="/vendor/logout" onClick={closeMenu}>
                 Log out
               </Link>

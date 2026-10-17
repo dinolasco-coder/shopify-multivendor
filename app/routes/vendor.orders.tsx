@@ -658,20 +658,10 @@ export default function VendorOrders() {
       </p>
 
       {actionData && "error" in actionData && actionData.error ? (
-        <div
-          className="sx-banner"
-          style={{ background: "#fbeae9", color: "#8e1f0b" }}
-        >
-          {actionData.error}
-        </div>
+        <div className="sx-banner err">{actionData.error}</div>
       ) : null}
       {actionData && "message" in actionData && actionData.message ? (
-        <div
-          className="sx-banner"
-          style={{ background: "#e4f7e9", color: "#0d6b2d" }}
-        >
-          {actionData.message}
-        </div>
+        <div className="sx-banner ok">{actionData.message}</div>
       ) : null}
 
       <div className="sx-banner info">
@@ -679,8 +669,8 @@ export default function VendorOrders() {
         tap <strong>Mark as fulfilled</strong>. Shopify notifies the customer.
       </div>
 
-      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "14px 16px" }}>
+      <div className="sx-panel sx-panel--flush">
+        <div className="sx-panel__toolbar">
           <div className="sx-tabs">
             {[
               { id: "all", label: "All" },

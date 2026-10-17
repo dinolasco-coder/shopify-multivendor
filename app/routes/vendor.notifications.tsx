@@ -55,16 +55,7 @@ export default function VendorNotifications() {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          marginBottom: 8,
-        }}
-      >
+      <div className="sx-page-head">
         <div>
           <h1 className="sx-title">Notifications</h1>
           <p className="sx-sub">
@@ -82,107 +73,45 @@ export default function VendorNotifications() {
         ) : null}
       </div>
 
-      <div className="sx-panel" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="sx-panel sx-panel--flush">
         {notifications.length === 0 ? (
           <div className="sx-empty">
             No notifications yet. New orders, payouts, and design requests will
             show up here.
           </div>
         ) : (
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          <ul className="sx-list">
             {notifications.map((n) => {
               const unreadItem = !n.readAt;
+              const chip =
+                n.type === "payment"
+                  ? "sx-chip sx-chip--payment"
+                  : n.type === "customization"
+                    ? "sx-chip sx-chip--custom"
+                    : "sx-chip sx-chip--order";
               return (
                 <li
                   key={n.id}
-                  style={{
-                    display: "flex",
-                    gap: 12,
-                    alignItems: "flex-start",
-                    padding: "14px 16px",
-                    borderBottom: "1px solid #ececec",
-                    background: unreadItem ? "#f7fafc" : "#fff",
-                  }}
+                  className={`sx-list__item${unreadItem ? " is-unread" : ""}`}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                        marginBottom: 4,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                          background:
-                            n.type === "payment"
-                              ? "#e4f7e9"
-                              : n.type === "customization"
-                                ? "#fff4e5"
-                                : "#eef3ff",
-                          color:
-                            n.type === "payment"
-                              ? "#0d6b2d"
-                              : n.type === "customization"
-                                ? "#8a5a00"
-                                : "#1a3a8a",
-                        }}
-                      >
-                        {typeLabel(n.type)}
-                      </span>
-                      {unreadItem ? (
-                        <span
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: "#2c6ecb",
-                            display: "inline-block",
-                          }}
-                          title="Unread"
-                        />
-                      ) : null}
-                      <span style={{ fontSize: 12, color: "#6d7175" }}>
+                  <div className="sx-list__body">
+                    <div className="sx-list__meta">
+                      <span className={chip}>{typeLabel(n.type)}</span>
+                      {unreadItem ? <span className="sx-dot" title="Unread" /> : null}
+                      <span className="sx-list__time">
                         {new Date(n.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <p
-                      style={{
-                        margin: "0 0 4px",
-                        fontWeight: unreadItem ? 700 : 600,
-                        fontSize: 14,
-                      }}
-                    >
-                      {n.href ? (
-                        <Link to={n.href} style={{ color: "inherit" }}>
-                          {n.title}
-                        </Link>
-                      ) : (
-                        n.title
-                      )}
+                    <p className="sx-list__title">
+                      {n.href ? <Link to={n.href}>{n.title}</Link> : n.title}
                     </p>
-                    {n.body ? (
-                      <p style={{ margin: 0, fontSize: 13, color: "#6d7175" }}>
-                        {n.body}
-                      </p>
-                    ) : null}
+                    {n.body ? <p className="sx-list__text">{n.body}</p> : null}
                   </div>
                   {unreadItem ? (
                     <Form method="post">
                       <input type="hidden" name="intent" value="markRead" />
                       <input type="hidden" name="id" value={n.id} />
-                      <button
-                        className="sx-btn"
-                        type="submit"
-                        disabled={busy}
-                        style={{ whiteSpace: "nowrap" }}
-                      >
+                      <button className="sx-btn" type="submit" disabled={busy}>
                         Mark read
                       </button>
                     </Form>
