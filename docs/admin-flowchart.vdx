@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Visio XML Drawing — import into SmartDraw via File → Import → Visio -->
+<VisioDocument xmlns="urn:schemas-microsoft-com:office:visio">
+  <DocumentProperties>
+    <Title>Shopify Admin Flowchart — InabelMarket</Title>
+    <Creator>Cursor</Creator>
+  </DocumentProperties>
+  <Pages>
+    <Page ID="0" Name="Admin Flowchart" NameU="Admin Flowchart">
+      <PageSheet>
+        <Cell N="PageWidth" V="11"/>
+        <Cell N="PageHeight" V="22"/>
+      </PageSheet>
+      <Shapes>
+
+        <!-- Title -->
+        <Shape ID="1" Type="Shape" NameU="Title">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="21.5"/>
+          <Cell N="Width" V="6"/><Cell N="Height" V="0.4"/>
+          <Text>Shopify Admin Flowchart — InabelMarket</Text>
+        </Shape>
+
+        <!-- Start -->
+        <Shape ID="10" Type="Shape" NameU="Start">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="20.8"/>
+          <Cell N="Width" V="1.8"/><Cell N="Height" V="0.55"/>
+          <Text>Start</Text>
+        </Shape>
+
+        <Shape ID="11" Type="Shape" NameU="OpenAdmin">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="20.0"/>
+          <Cell N="Width" V="2.4"/><Cell N="Height" V="0.55"/>
+          <Text>Open Shopify Admin</Text>
+        </Shape>
+
+        <Shape ID="12" Type="Shape" NameU="OpenApp">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="19.2"/>
+          <Cell N="Width" V="2.6"/><Cell N="Height" V="0.55"/>
+          <Text>Open Multivendor App (/app)</Text>
+        </Shape>
+
+        <Shape ID="13" Type="Shape" NameU="Authorized">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="18.2"/>
+          <Cell N="Width" V="2.4"/><Cell N="Height" V="1.0"/>
+          <Text>App Installed &amp; Authorized?</Text>
+        </Shape>
+
+        <Shape ID="14" Type="Shape" NameU="Install">
+          <Cell N="PinX" V="8.4"/><Cell N="PinY" V="18.2"/>
+          <Cell N="Width" V="2.5"/><Cell N="Height" V="0.7"/>
+          <Text>Install / Re-authorize App Scopes</Text>
+        </Shape>
+
+        <Shape ID="15" Type="Shape" NameU="Home">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="16.9"/>
+          <Cell N="Width" V="2.4"/><Cell N="Height" V="0.55"/>
+          <Text>Admin Dashboard Home</Text>
+        </Shape>
+
+        <Shape ID="16" Type="Shape" NameU="Manage">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="15.9"/>
+          <Cell N="Width" V="2.5"/><Cell N="Height" V="1.0"/>
+          <Text>What do you want to manage?</Text>
+        </Shape>
+
+        <!-- Three lanes -->
+        <Shape ID="20" Type="Shape" NameU="Sellers">
+          <Cell N="PinX" V="2.2"/><Cell N="PinY" V="14.5"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>Sellers
+/app/vendors</Text>
+        </Shape>
+        <Shape ID="21" Type="Shape" NameU="Products">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="14.5"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>Products
+/app/products</Text>
+        </Shape>
+        <Shape ID="22" Type="Shape" NameU="Orders">
+          <Cell N="PinX" V="8.8"/><Cell N="PinY" V="14.5"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>Orders
+/app/orders</Text>
+        </Shape>
+
+        <Shape ID="23" Type="Shape" NameU="InviteQ">
+          <Cell N="PinX" V="2.2"/><Cell N="PinY" V="13.4"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.9"/>
+          <Text>Invite / Approve Seller?</Text>
+        </Shape>
+        <Shape ID="24" Type="Shape" NameU="ApproveSeller">
+          <Cell N="PinX" V="2.2"/><Cell N="PinY" V="12.2"/>
+          <Cell N="Width" V="2.3"/><Cell N="Height" V="0.7"/>
+          <Text>Approve Seller + Create Collection</Text>
+        </Shape>
+        <Shape ID="25" Type="Shape" NameU="SellerActive">
+          <Cell N="PinX" V="2.2"/><Cell N="PinY" V="11.2"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.55"/>
+          <Text>Seller Active</Text>
+        </Shape>
+
+        <Shape ID="26" Type="Shape" NameU="ProdApprQ">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="13.4"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.9"/>
+          <Text>Product Needs Approval?</Text>
+        </Shape>
+        <Shape ID="27" Type="Shape" NameU="ApproveProd">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="12.2"/>
+          <Cell N="Width" V="2.3"/><Cell N="Height" V="0.7"/>
+          <Text>Approve / Reject Draft Product</Text>
+        </Shape>
+        <Shape ID="28" Type="Shape" NameU="ProdLive">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="11.2"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.55"/>
+          <Text>Product Live or Rejected</Text>
+        </Shape>
+
+        <Shape ID="29" Type="Shape" NameU="Sync">
+          <Cell N="PinX" V="8.8"/><Cell N="PinY" V="13.4"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>Sync / View Seller Splits</Text>
+        </Shape>
+        <Shape ID="30" Type="Shape" NameU="CancelCheck">
+          <Cell N="PinX" V="8.8"/><Cell N="PinY" V="12.4"/>
+          <Cell N="Width" V="2.3"/><Cell N="Height" V="0.7"/>
+          <Text>Cancel Order or Check Fulfillment</Text>
+        </Shape>
+        <Shape ID="31" Type="Shape" NameU="OrderUpdated">
+          <Cell N="PinX" V="8.8"/><Cell N="PinY" V="11.4"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.55"/>
+          <Text>Order Updated</Text>
+        </Shape>
+
+        <Shape ID="40" Type="Shape" NameU="MoneyQ">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="10.0"/>
+          <Cell N="Width" V="2.4"/><Cell N="Height" V="0.9"/>
+          <Text>Money &amp; Reports next?</Text>
+        </Shape>
+        <Shape ID="41" Type="Shape" NameU="Payouts">
+          <Cell N="PinX" V="2.5"/><Cell N="PinY" V="8.8"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>Record Payouts
+/app/payouts</Text>
+        </Shape>
+        <Shape ID="42" Type="Shape" NameU="Reports">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="8.8"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>View Analytics
+/app/reports</Text>
+        </Shape>
+        <Shape ID="43" Type="Shape" NameU="Settings">
+          <Cell N="PinX" V="8.5"/><Cell N="PinY" V="8.8"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.65"/>
+          <Text>Settings
+/app/settings</Text>
+        </Shape>
+
+        <Shape ID="50" Type="Shape" NameU="Done">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="7.6"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.55"/>
+          <Text>Done for now</Text>
+        </Shape>
+        <Shape ID="51" Type="Shape" NameU="Leave">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="6.8"/>
+          <Cell N="Width" V="2.2"/><Cell N="Height" V="0.55"/>
+          <Text>Leave App / Admin</Text>
+        </Shape>
+        <Shape ID="52" Type="Shape" NameU="End">
+          <Cell N="PinX" V="5.5"/><Cell N="PinY" V="6.0"/>
+          <Cell N="Width" V="1.8"/><Cell N="Height" V="0.55"/>
+          <Text>End</Text>
+        </Shape>
+
+        <!-- Flow labels as text notes for SmartDraw users -->
+        <Shape ID="90" Type="Shape" NameU="Legend">
+          <Cell N="PinX" V="2.2"/><Cell N="PinY" V="5.0"/>
+          <Cell N="Width" V="3.5"/><Cell N="Height" V="1.4"/>
+          <Text>Flow labels:
+Authorized? Yes → Home | No → Install
+Manage → Sellers / Products / Orders
+Then → Payouts / Reports / Settings → End
+(Connect shapes in SmartDraw with straight connectors)</Text>
+        </Shape>
+
+      </Shapes>
+    </Page>
+  </Pages>
+</VisioDocument>

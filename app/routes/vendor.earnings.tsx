@@ -232,8 +232,11 @@ export default function VendorEarnings() {
             }}
           >
             <div>
-              <label style={labelStyle}>Method</label>
+              <label htmlFor="vendor-payout-method" style={labelStyle}>
+                Method
+              </label>
               <select
+                id="vendor-payout-method"
                 name="payoutMethod"
                 defaultValue={payout.method}
                 style={fieldStyle}
@@ -247,8 +250,11 @@ export default function VendorEarnings() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Bank / e-wallet</label>
+              <label htmlFor="vendor-payout-bic" style={labelStyle}>
+                Bank / e-wallet
+              </label>
               <select
+                id="vendor-payout-bic"
                 name="payoutBankBic"
                 defaultValue={
                   payout.bankBic ||
@@ -268,8 +274,11 @@ export default function VendorEarnings() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Account name</label>
+              <label htmlFor="vendor-payout-name" style={labelStyle}>
+                Account name
+              </label>
               <input
+                id="vendor-payout-name"
                 name="payoutAccountName"
                 defaultValue={payout.accountName}
                 placeholder="Full name on account"
@@ -278,8 +287,11 @@ export default function VendorEarnings() {
               />
             </div>
             <div>
-              <label style={labelStyle}>GCash / account number</label>
+              <label htmlFor="vendor-payout-number" style={labelStyle}>
+                GCash / account number
+              </label>
               <input
+                id="vendor-payout-number"
                 name="payoutAccountNumber"
                 defaultValue={payout.accountNumber}
                 placeholder="09XXXXXXXXX or account #"
@@ -288,8 +300,11 @@ export default function VendorEarnings() {
               />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>Notes (optional)</label>
+              <label htmlFor="vendor-payout-notes" style={labelStyle}>
+                Notes (optional)
+              </label>
               <input
+                id="vendor-payout-notes"
                 name="payoutNotes"
                 defaultValue={payout.notes}
                 placeholder="Branch or other notes"

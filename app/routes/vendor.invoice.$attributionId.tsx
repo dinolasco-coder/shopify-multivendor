@@ -9,20 +9,7 @@ import {
   COMMISSION_ENABLED,
   effectiveCommissionAmount,
 } from "../utils/commission-flag";
-
-function findUrls(text: string): string[] {
-  const found = text.match(/https?:\/\/[^\s<>"'\)\]|]+/gi) || [];
-  return found.map((raw) => raw.replace(/[.,;:!?]+$/g, ""));
-}
-
-function isImageUrl(url: string) {
-  try {
-    const path = new URL(url).pathname.toLowerCase();
-    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
-  } catch {
-    return false;
-  }
-}
+import { findImageUrls, findUrls } from "../utils/note-links";
 
 function linkifyNote(note: string) {
   const urls = findUrls(note);
@@ -245,8 +232,7 @@ export default function VendorInvoice() {
                     marginTop: 10,
                   }}
                 >
-                  {(findUrls(note) || [])
-                    .filter(isImageUrl)
+                  {findImageUrls(note)
                     .map((url) => (
                       <a
                         key={url}

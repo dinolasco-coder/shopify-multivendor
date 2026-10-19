@@ -451,6 +451,7 @@ export default function VendorAiCustomization() {
                       <input type="hidden" name="requestId" value={d.id} />
                       <input type="hidden" name="intent" value="updateRequest" />
                       <label
+                        htmlFor={`seller-notes-${d.id}`}
                         style={{
                           display: "block",
                           fontSize: 12,
@@ -461,6 +462,7 @@ export default function VendorAiCustomization() {
                         Seller notes
                       </label>
                       <textarea
+                        id={`seller-notes-${d.id}`}
                         name="sellerNotes"
                         defaultValue={d.sellerNotes}
                         rows={2}

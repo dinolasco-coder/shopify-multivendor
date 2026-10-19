@@ -412,16 +412,24 @@ export default function AdminPayoutsPage() {
                 <input type="hidden" name="intent" value="markAllPaid" />
                 <div className="nx-bulk">
                   <div>
-                    <label>Date paid</label>
-                    <input name="paidAt" type="date" />
+                    <label htmlFor="payout-markall-paidAt">Date paid</label>
+                    <input id="payout-markall-paidAt" name="paidAt" type="date" />
                   </div>
                   <div>
-                    <label>Reference</label>
-                    <input name="reference" placeholder="Batch / GCash ref" />
+                    <label htmlFor="payout-markall-reference">Reference</label>
+                    <input
+                      id="payout-markall-reference"
+                      name="reference"
+                      placeholder="Batch / GCash ref"
+                    />
                   </div>
                   <div>
-                    <label>Note</label>
-                    <input name="note" placeholder="Optional note" />
+                    <label htmlFor="payout-markall-note">Note</label>
+                    <input
+                      id="payout-markall-note"
+                      name="note"
+                      placeholder="Optional note"
+                    />
                   </div>
                   <button
                     className="nx-btn nx-btn--primary"
@@ -554,8 +562,11 @@ export default function AdminPayoutsPage() {
                             />
                             <div className="nx-form">
                               <div>
-                                <label>Amount</label>
+                                <label htmlFor={`payout-amount-${row.vendorId}`}>
+                                  Amount
+                                </label>
                                 <input
+                                  id={`payout-amount-${row.vendorId}`}
                                   name="amount"
                                   type="number"
                                   min={0.01}
@@ -567,19 +578,33 @@ export default function AdminPayoutsPage() {
                                 />
                               </div>
                               <div>
-                                <label>Date paid</label>
-                                <input name="paidAt" type="date" />
+                                <label htmlFor={`payout-paidAt-${row.vendorId}`}>
+                                  Date paid
+                                </label>
+                                <input
+                                  id={`payout-paidAt-${row.vendorId}`}
+                                  name="paidAt"
+                                  type="date"
+                                />
                               </div>
                               <div>
-                                <label>Reference</label>
+                                <label htmlFor={`payout-ref-${row.vendorId}`}>
+                                  Reference
+                                </label>
                                 <input
+                                  id={`payout-ref-${row.vendorId}`}
                                   name="reference"
                                   placeholder="GCash / bank ref"
                                 />
                               </div>
                               <div>
-                                <label>Note</label>
-                                <input name="note" />
+                                <label htmlFor={`payout-note-${row.vendorId}`}>
+                                  Note
+                                </label>
+                                <input
+                                  id={`payout-note-${row.vendorId}`}
+                                  name="note"
+                                />
                               </div>
                             </div>
                             <div style={{ marginTop: 8 }}>

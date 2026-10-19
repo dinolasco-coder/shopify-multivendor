@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="1900" viewBox="0 0 780 1900">
+  <rect width="780" height="1900" fill="#ffffff"/>
+  <text x="390" y="28" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#111">Shopify Admin Flowchart</text>
+  <text x="390" y="50" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#666">InabelMarket  Merchant / Multivendor App</text>
+
+  <rect x="280" y="70" width="220" height="1800" rx="12" fill="#f4f6f8"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <g fill="none" stroke="#333" stroke-width="1.75" marker-end="url(#arrow)">
+    <path d="M390 92 L390 122"/>
+    <path d="M390 178 L390 222"/>
+    <path d="M390 278 L390 295"/>
+
+    <!-- auth No � install -->
+    <path d="M490 340 L520 340"/>
+    <!-- install retry -->
+    <path d="M620 312 L620 270 L390 270 L390 295"/>
+    <!-- auth Yes � home -->
+    <path d="M390 385 L390 482"/>
+    <path d="M390 538 L390 565"/>
+
+    <!-- task � sellers / products / orders -->
+    <path d="M290 610 L140 610 L140 762"/>
+    <path d="M390 655 L390 762"/>
+    <path d="M490 610 L640 610 L640 762"/>
+
+    <!-- sellers branch -->
+    <path d="M140 818 L140 855"/>
+    <path d="M140 945 L140 1052"/>
+    <path d="M140 1108 L140 1162"/>
+    <path d="M40 900 L40 1190 L40 1300 L290 1300"/>
+
+    <!-- products branch -->
+    <path d="M390 818 L390 855"/>
+    <path d="M390 945 L390 1052"/>
+    <path d="M390 1108 L390 1162"/>
+    <path d="M520 900 L520 1190 L390 1190"/>
+    <path d="M390 1218 L390 1255"/>
+
+    <!-- orders branch -->
+    <path d="M640 818 L640 902"/>
+    <path d="M640 958 L640 1052"/>
+    <path d="M640 1108 L640 1162"/>
+    <path d="M640 1218 L640 1300 L490 1300"/>
+
+    <!-- money branches -->
+    <path d="M290 1300 L200 1300 L200 1452"/>
+    <path d="M390 1345 L390 1452"/>
+    <path d="M490 1300 L580 1300 L580 1452"/>
+
+    <path d="M200 1508 L200 1600 L290 1600"/>
+    <path d="M390 1508 L390 1602"/>
+    <path d="M580 1508 L580 1600 L490 1600"/>
+
+    <path d="M390 1658 L390 1722"/>
+    <path d="M390 1778 L390 1848"/>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#1a73e8">
+    <text x="500" y="328">No</text>
+    <text x="520" y="262">Retry</text>
+    <text x="402" y="430">Yes</text>
+    <text x="160" y="598">Sellers</text>
+    <text x="402" y="710">Products</text>
+    <text x="560" y="598">Orders</text>
+    <text x="152" y="990">Yes</text>
+    <text x="48" y="1020">No</text>
+    <text x="402" y="990">Yes</text>
+    <text x="530" y="1020">No</text>
+    <text x="210" y="1288">Payouts</text>
+    <text x="402" y="1400">Reports</text>
+    <text x="520" y="1288">Settings</text>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <ellipse cx="390" cy="70" rx="70" ry="22" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+    <text x="390" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="#111">Start</text>
+
+    <rect x="290" y="122" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="156" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Open Shopify Admin</text>
+
+    <rect x="290" y="222" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="246" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Open Multivendor App</text>
+    <text x="390" y="264" text-anchor="middle" font-size="11" fill="#555">(/app)</text>
+
+    <polygon points="390,295 490,340 390,385 290,340" fill="#fff2cc" stroke="#d6b656" stroke-width="2"/>
+    <text x="390" y="336" text-anchor="middle" font-size="12" font-weight="700" fill="#111">App Installed &amp;</text>
+    <text x="390" y="352" text-anchor="middle" font-size="12" font-weight="700" fill="#111">Authorized?</text>
+
+    <rect x="520" y="312" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="620" y="336" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Install / Re-authorize</text>
+    <text x="620" y="354" text-anchor="middle" font-size="11" fill="#555">App Scopes</text>
+
+    <rect x="290" y="482" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="506" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Admin Dashboard</text>
+    <text x="390" y="524" text-anchor="middle" font-size="11" fill="#555">Home</text>
+
+    <polygon points="390,565 490,610 390,655 290,610" fill="#fff2cc" stroke="#d6b656" stroke-width="2"/>
+    <text x="390" y="606" text-anchor="middle" font-size="12" font-weight="700" fill="#111">What do you want</text>
+    <text x="390" y="622" text-anchor="middle" font-size="12" font-weight="700" fill="#111">to manage?</text>
+
+    <!-- Sellers column -->
+    <rect x="40" y="762" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="140" y="786" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Sellers</text>
+    <text x="140" y="804" text-anchor="middle" font-size="11" fill="#555">/app/vendors</text>
+
+    <polygon points="140,855 240,900 140,945 40,900" fill="#fff2cc" stroke="#d6b656" stroke-width="2"/>
+    <text x="140" y="896" text-anchor="middle" font-size="11" font-weight="700" fill="#111">Invite / Approve</text>
+    <text x="140" y="912" text-anchor="middle" font-size="11" font-weight="700" fill="#111">Seller?</text>
+
+    <rect x="40" y="1052" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="140" y="1076" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Approve Seller +</text>
+    <text x="140" y="1094" text-anchor="middle" font-size="11" fill="#555">Create Collection</text>
+
+    <rect x="40" y="1162" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="140" y="1196" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Seller Active</text>
+
+    <!-- Products column -->
+    <rect x="290" y="762" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="786" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Products</text>
+    <text x="390" y="804" text-anchor="middle" font-size="11" fill="#555">/app/products</text>
+
+    <polygon points="390,855 490,900 390,945 290,900" fill="#fff2cc" stroke="#d6b656" stroke-width="2"/>
+    <text x="390" y="896" text-anchor="middle" font-size="11" font-weight="700" fill="#111">Product Needs</text>
+    <text x="390" y="912" text-anchor="middle" font-size="11" font-weight="700" fill="#111">Approval?</text>
+
+    <rect x="290" y="1052" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="1076" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Approve / Reject</text>
+    <text x="390" y="1094" text-anchor="middle" font-size="11" fill="#555">Draft Product</text>
+
+    <rect x="290" y="1162" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="1186" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Product Live</text>
+    <text x="390" y="1204" text-anchor="middle" font-size="11" fill="#555">or Rejected</text>
+
+    <!-- Orders column -->
+    <rect x="540" y="762" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="640" y="786" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Orders</text>
+    <text x="640" y="804" text-anchor="middle" font-size="11" fill="#555">/app/orders</text>
+
+    <rect x="540" y="902" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="640" y="926" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Sync / View</text>
+    <text x="640" y="944" text-anchor="middle" font-size="11" fill="#555">Seller Splits</text>
+
+    <rect x="540" y="1052" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="640" y="1076" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Cancel Order or</text>
+    <text x="640" y="1094" text-anchor="middle" font-size="11" fill="#555">Check Fulfillment</text>
+
+    <rect x="540" y="1162" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="640" y="1196" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Order Updated</text>
+
+    <!-- Money -->
+    <polygon points="390,1255 490,1300 390,1345 290,1300" fill="#fff2cc" stroke="#d6b656" stroke-width="2"/>
+    <text x="390" y="1296" text-anchor="middle" font-size="11" font-weight="700" fill="#111">Money &amp;</text>
+    <text x="390" y="1312" text-anchor="middle" font-size="11" font-weight="700" fill="#111">Reports next?</text>
+
+    <rect x="100" y="1452" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="200" y="1476" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Record Payouts</text>
+    <text x="200" y="1494" text-anchor="middle" font-size="11" fill="#555">/app/payouts</text>
+
+    <rect x="290" y="1452" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="1476" text-anchor="middle" font-size="12" font-weight="600" fill="#111">View Analytics</text>
+    <text x="390" y="1494" text-anchor="middle" font-size="11" fill="#555">/app/reports</text>
+
+    <rect x="480" y="1452" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="580" y="1476" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Settings</text>
+    <text x="580" y="1494" text-anchor="middle" font-size="11" fill="#555">/app/settings</text>
+
+    <rect x="290" y="1602" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="1636" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Done for now</text>
+
+    <rect x="290" y="1722" width="200" height="56" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+    <text x="390" y="1756" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Leave App / Admin</text>
+
+    <ellipse cx="390" cy="1850" rx="70" ry="22" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+    <text x="390" y="1855" text-anchor="middle" font-size="14" font-weight="700" fill="#111">End</text>
+  </g>
+</svg>

@@ -810,7 +810,6 @@ export default function VendorAddProduct() {
                   onChange={setTitle}
                   autoComplete="off"
                   placeholder="Type the product name"
-                  autoFocus
                 />
               </Step>
 

@@ -56,7 +56,7 @@ function money(value: unknown): number {
     if (obj.amount != null) return money(obj.amount);
   }
   // Shopify sometimes returns "1234.56", occasionally with currency junk.
-  const cleaned = String(value).replace(/[^0-9.\-]/g, "");
+  const cleaned = String(value).replace(/[^0-9.-]/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
 }

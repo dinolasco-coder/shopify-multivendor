@@ -1,0 +1,165 @@
+  <?xml version="1.0" encoding="UTF-8"?>
+  <svg xmlns="http://www.w3.org/2000/svg" width="720" height="1820" viewBox="0 0 720 1820">
+    <rect width="720" height="1820" fill="#ffffff"/>
+    <text x="360" y="28" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#111">Seller / Vendor Flowchart</text>
+    <text x="360" y="50" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#666">InabelMarket</text>
+
+    <!-- center lane -->
+    <rect x="250" y="70" width="220" height="1720" rx="12" fill="#f4f6f8"/>
+
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#333"/>
+      </marker>
+    </defs>
+
+    <!-- edges (orthogonal only) -->
+    <g fill="none" stroke="#333" stroke-width="1.75" marker-end="url(#arrow)">
+      <!-- start � access � new -->
+      <path d="M360 92 L360 126"/>
+      <path d="M360 174 L360 191"/>
+
+      <!-- new � register (Yes) -->
+      <path d="M265 230 L160 230 L160 336"/>
+      <!-- new � login (No) -->
+      <path d="M455 230 L560 230 L560 336"/>
+
+      <!-- register/login � auth -->
+      <path d="M160 384 L160 470 L255 470"/>
+      <path d="M560 384 L560 470 L465 470"/>
+
+      <!-- auth � approved -->
+      <path d="M360 494 L360 541"/>
+
+      <!-- approved � wait (No) -->
+      <path d="M455 580 L475 580"/>
+      <!-- wait retry � approved top -->
+      <path d="M580 556 L580 500 L360 500 L360 541"/>
+      <!-- approved � dash (Yes) -->
+      <path d="M360 619 L360 696"/>
+
+      <!-- dash � products � needAppr -->
+      <path d="M360 744 L360 796"/>
+      <path d="M360 844 L360 901"/>
+
+      <!-- needAppr � draft (Yes) -->
+      <path d="M265 940 L140 940 L140 1036"/>
+      <!-- draft � live -->
+      <path d="M140 1084 L140 1180 L255 1180"/>
+      <!-- needAppr � live (No) -->
+      <path d="M360 979 L360 1156"/>
+
+      <!-- live � orders � custom -->
+      <path d="M360 1204 L360 1256"/>
+      <path d="M360 1304 L360 1351"/>
+
+      <!-- custom � designs (Yes) -->
+      <path d="M265 1390 L140 1390 L140 1496"/>
+      <!-- designs � fulfill -->
+      <path d="M245 1520 L255 1520"/>
+      <!-- custom � fulfill (No) -->
+      <path d="M360 1429 L360 1496"/>
+
+      <!-- fulfill � earnings � logout � end -->
+      <path d="M360 1544 L360 1606"/>
+      <path d="M360 1654 L360 1696"/>
+      <path d="M360 1744 L360 1778"/>
+    </g>
+
+    <!-- edge labels -->
+    <g font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#1a73e8">
+      <text x="200" y="222">Yes</text>
+      <text x="490" y="222">No</text>
+      <text x="468" y="568">No</text>
+      <text x="500" y="492">Retry</text>
+      <text x="372" y="660">Yes</text>
+      <text x="180" y="932">Yes</text>
+      <text x="372" y="1060">No</text>
+      <text x="40" y="1135">Admin approves</text>
+      <text x="180" y="1382">Yes</text>
+      <text x="372" y="1460">No</text>
+    </g>
+
+    <!-- nodes -->
+    <g font-family="Segoe UI, Arial, sans-serif">
+      <!-- Start -->
+      <ellipse cx="360" cy="70" rx="70" ry="22" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+      <text x="360" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="#111">Start</text>
+
+      <!-- Access -->
+      <rect x="255" y="126" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="156" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Access Seller Portal</text>
+
+      <!-- New Seller? -->
+      <polygon points="360,191 455,230 360,269 265,230" fill="#f1f3f4" stroke="#1a73e8" stroke-width="2"/>
+      <text x="360" y="235" text-anchor="middle" font-size="12" font-weight="700" fill="#111">New Seller?</text>
+
+      <!-- Register -->
+      <rect x="55" y="336" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="160" y="366" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Sign Up / Register</text>
+
+      <!-- Login -->
+      <rect x="455" y="336" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="560" y="366" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Sign In</text>
+
+      <!-- Auth ready -->
+      <rect x="255" y="446" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="476" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Seller Account Ready</text>
+
+      <!-- Approved? -->
+      <polygon points="360,541 455,580 360,619 265,580" fill="#f1f3f4" stroke="#1a73e8" stroke-width="2"/>
+      <text x="360" y="585" text-anchor="middle" font-size="12" font-weight="700" fill="#111">Approved by Admin?</text>
+
+      <!-- Wait -->
+      <rect x="475" y="556" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="580" y="586" text-anchor="middle" font-size="12" font-weight="600" fill="#111">Wait on Pending Screen</text>
+
+      <!-- Dashboard -->
+      <rect x="255" y="696" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="726" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Seller Dashboard / Home</text>
+
+      <!-- Products -->
+      <rect x="255" y="796" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="826" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Add / Manage Products</text>
+
+      <!-- Needs approval? -->
+      <polygon points="360,901 455,940 360,979 265,940" fill="#f1f3f4" stroke="#1a73e8" stroke-width="2"/>
+      <text x="360" y="945" text-anchor="middle" font-size="12" font-weight="700" fill="#111">Needs Admin Approval?</text>
+
+      <!-- Draft -->
+      <rect x="35" y="1036" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="140" y="1066" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Saved as Draft</text>
+
+      <!-- Live -->
+      <rect x="255" y="1156" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="1186" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Product Live on Store</text>
+
+      <!-- Orders -->
+      <rect x="255" y="1256" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="1286" text-anchor="middle" font-size="13" font-weight="600" fill="#111">View Orders &amp; Sales</text>
+
+      <!-- Custom? -->
+      <polygon points="360,1351 455,1390 360,1429 265,1390" fill="#f1f3f4" stroke="#1a73e8" stroke-width="2"/>
+      <text x="360" y="1395" text-anchor="middle" font-size="12" font-weight="700" fill="#111">Custom Design Order?</text>
+
+      <!-- Designs -->
+      <rect x="35" y="1496" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="140" y="1526" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Review Custom Designs</text>
+
+      <!-- Fulfill -->
+      <rect x="255" y="1496" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="1526" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Fulfill Order + Tracking</text>
+
+      <!-- Earnings -->
+      <rect x="255" y="1606" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="1636" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Check Earnings &amp; Payouts</text>
+
+      <!-- Logout -->
+      <rect x="255" y="1696" width="210" height="48" rx="8" fill="#fff" stroke="#333" stroke-width="1.75"/>
+      <text x="360" y="1726" text-anchor="middle" font-size="13" font-weight="600" fill="#111">Logout</text>
+
+      <!-- End -->
+      <ellipse cx="360" cy="1800" rx="70" ry="22" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+      <text x="360" y="1805" text-anchor="middle" font-size="14" font-weight="700" fill="#111">End</text>
+    </g>
+  </svg>

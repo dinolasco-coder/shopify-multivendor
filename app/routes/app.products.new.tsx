@@ -685,7 +685,6 @@ export default function AdminAddProduct() {
                   onChange={setTitle}
                   autoComplete="off"
                   placeholder="Type the product name"
-                  autoFocus
                 />
               </Step>
 

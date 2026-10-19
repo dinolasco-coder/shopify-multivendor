@@ -1,7 +1,7 @@
 /** Shared helpers for order-note URLs / custom design images */
 
 export function findUrls(text: string): string[] {
-  const found = text.match(/https?:\/\/[^\s<>"'\)\]|]+/gi) || [];
+  const found = text.match(/https?:\/\/[^\s<>"'|)]+/gi) || [];
   return found.map((raw) => raw.replace(/[.,;:!?]+$/g, ""));
 }
 

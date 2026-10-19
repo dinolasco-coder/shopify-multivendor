@@ -19,6 +19,7 @@ import {
   type OrderCancelReason,
 } from "../utils/order-cancel";
 import prisma from "../db.server";
+import { findImageUrls, findUrls } from "../utils/note-links";
 
 const CARRIERS = [
   "",
@@ -232,24 +233,9 @@ function labelStatus(value: string) {
     .join(" ");
 }
 
-function findUrls(text: string): string[] {
-  const re = /https?:\/\/[^\s<>"'\)\]|]+/gi;
-  const found = text.match(re) || [];
-  return found.map((raw) => raw.replace(/[.,;:!?]+$/g, ""));
-}
-
-function isImageUrl(url: string) {
-  try {
-    const path = new URL(url).pathname.toLowerCase();
-    return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
-  } catch {
-    return false;
-  }
-}
-
 function NoteWithLinks({ note }: { note: string }) {
   const urls = findUrls(note);
-  const imageUrls = urls.filter(isImageUrl);
+  const imageUrls = findImageUrls(note);
 
   // Build clickable text without a shared /g RegExp (that broke links).
   const nodes: Array<string | { url: string }> = [];
@@ -923,6 +909,7 @@ export default function VendorOrders() {
                                 value={order.id}
                               />
                               <label
+                                htmlFor={`tracking-${order.id}`}
                                 style={{
                                   display: "block",
                                   fontSize: 12,
@@ -934,6 +921,7 @@ export default function VendorOrders() {
                                 Tracking number
                               </label>
                               <input
+                                id={`tracking-${order.id}`}
                                 type="text"
                                 name="trackingNumber"
                                 placeholder="e.g. 1234567890"
@@ -958,6 +946,7 @@ export default function VendorOrders() {
                                 }}
                               />
                               <label
+                                htmlFor={`carrier-${order.id}`}
                                 style={{
                                   display: "block",
                                   fontSize: 12,
@@ -969,6 +958,7 @@ export default function VendorOrders() {
                                 Shipping carrier
                               </label>
                               <select
+                                id={`carrier-${order.id}`}
                                 name="trackingCompany"
                                 value={draft.trackingCompany}
                                 onChange={(e) =>
@@ -999,6 +989,7 @@ export default function VendorOrders() {
                                 ))}
                               </select>
                               <label
+                                htmlFor={`tracking-url-${order.id}`}
                                 style={{
                                   display: "block",
                                   fontSize: 12,
@@ -1010,6 +1001,7 @@ export default function VendorOrders() {
                                 Tracking URL
                               </label>
                               <input
+                                id={`tracking-url-${order.id}`}
                                 type="url"
                                 name="trackingUrl"
                                 placeholder="Enter valid tracking page link"
@@ -1214,6 +1206,7 @@ export default function VendorOrders() {
                               className="sx-btn"
                               to={`/vendor/invoice/${order.id}`}
                               target="_blank"
+                              rel="noreferrer"
                             >
                               Invoice
                             </Link>

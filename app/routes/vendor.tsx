@@ -114,11 +114,8 @@ function ProductsNavDropdown({
 }) {
   const productsActive =
     path.startsWith("/vendor/products") || path.startsWith("/vendor/inventory");
-  const [open, setOpen] = useState(productsActive);
-
-  useEffect(() => {
-    if (productsActive) setOpen(true);
-  }, [productsActive]);
+  const [expanded, setExpanded] = useState(false);
+  const open = productsActive || expanded;
 
   return (
     <div className={`sx-nav__group${open ? " is-open" : ""}`}>
@@ -126,7 +123,7 @@ function ProductsNavDropdown({
         type="button"
         className={`sx-nav__toggle${productsActive ? " is-active" : ""}`}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setExpanded((v) => !v)}
       >
         <span>Products</span>
         <span className="sx-nav__chevron" aria-hidden>
@@ -162,10 +159,6 @@ export default function VendorLayout() {
   const data = useLoaderData<typeof loader>();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -246,12 +239,12 @@ export default function VendorLayout() {
           <nav className="sx-nav">
             <div className="sx-nav__section">
               <p className="sx-nav__label">Main</p>
-              <NavLink
-                to="/vendor"
-                label="Home"
-                active={path === "/vendor"}
-                onNavigate={closeMenu}
-              />
+            <NavLink
+              to="/vendor"
+              label="Home"
+              active={path === "/vendor"}
+              onNavigate={closeMenu}
+            />
               <NavLink
                 to="/vendor/orders"
                 label="Orders"

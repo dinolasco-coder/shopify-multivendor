@@ -151,8 +151,11 @@ export default function VendorAccount() {
             }}
           >
             <div>
-              <label style={labelStyle}>Business name</label>
+              <label htmlFor="vendor-account-name" style={labelStyle}>
+                Business name
+              </label>
               <input
+                id="vendor-account-name"
                 name="name"
                 defaultValue={name}
                 required
@@ -160,8 +163,11 @@ export default function VendorAccount() {
               />
             </div>
             <div>
-              <label style={labelStyle}>Email</label>
+              <label htmlFor="vendor-account-email" style={labelStyle}>
+                Email
+              </label>
               <input
+                id="vendor-account-email"
                 name="email"
                 type="email"
                 defaultValue={email}
@@ -196,8 +202,11 @@ export default function VendorAccount() {
           >
             {!hasGoogle ? (
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={labelStyle}>Current password</label>
+                <label htmlFor="vendor-account-current-pw" style={labelStyle}>
+                  Current password
+                </label>
                 <input
+                  id="vendor-account-current-pw"
                   name="currentPassword"
                   type="password"
                   autoComplete="current-password"
@@ -207,10 +216,11 @@ export default function VendorAccount() {
               </div>
             ) : (
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={labelStyle}>
+                <label htmlFor="vendor-account-current-pw-opt" style={labelStyle}>
                   Current password (only if you already set one)
                 </label>
                 <input
+                  id="vendor-account-current-pw-opt"
                   name="currentPassword"
                   type="password"
                   autoComplete="current-password"
@@ -219,8 +229,11 @@ export default function VendorAccount() {
               </div>
             )}
             <div>
-              <label style={labelStyle}>New password</label>
+              <label htmlFor="vendor-account-new-pw" style={labelStyle}>
+                New password
+              </label>
               <input
+                id="vendor-account-new-pw"
                 name="newPassword"
                 type="password"
                 autoComplete="new-password"
@@ -230,8 +243,11 @@ export default function VendorAccount() {
               />
             </div>
             <div>
-              <label style={labelStyle}>Confirm new password</label>
+              <label htmlFor="vendor-account-confirm-pw" style={labelStyle}>
+                Confirm new password
+              </label>
               <input
+                id="vendor-account-confirm-pw"
                 name="confirmPassword"
                 type="password"
                 autoComplete="new-password"
