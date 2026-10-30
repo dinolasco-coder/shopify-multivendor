@@ -535,21 +535,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         staffNote: staffNote || `Cancelled from Multivendor Admin`,
       });
       const label = orderName || result.orderName || "order";
+      let customizationNote = "";
+      try {
+        const { cancelCustomizationForShopifyOrder } = await import(
+          "../models/customization.server"
+        );
+        const n = await cancelCustomizationForShopifyOrder(session.shop, orderId);
+        if (n > 0) {
+          customizationNote = ` ${n} AI customization request${
+            n === 1 ? "" : "s"
+          } marked cancelled.`;
+        }
+      } catch (customError) {
+        console.error("cancel customization on admin order cancel failed", customError);
+      }
       if (notifyCustomer && result.notified) {
         return {
           ok: true,
-          message: `Cancelled ${label}. Shopify emailed ${result.customerEmail}.`,
+          message: `Cancelled ${label}. Shopify emailed ${result.customerEmail}.${customizationNote}`,
         };
       }
       if (notifyCustomer && !result.customerEmail) {
         return {
           ok: true,
-          message: `Cancelled ${label}, but this order has no customer email so Shopify could not send a notification.`,
+          message: `Cancelled ${label}, but this order has no customer email so Shopify could not send a notification.${customizationNote}`,
         };
       }
       return {
         ok: true,
-        message: `Cancelled ${label}. Customer email was not sent.`,
+        message: `Cancelled ${label}. Customer email was not sent.${customizationNote}`,
       };
     } catch (error) {
       console.error("Admin cancel order failed", error);

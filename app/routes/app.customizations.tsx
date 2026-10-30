@@ -6,9 +6,8 @@ import { authenticate } from "../shopify.server";
 import { listAttributionsForShop } from "../models/attribution.server";
 import {
   listCustomizationRequestsForShop,
-  upsertCustomizationRequest,
 } from "../models/customization.server";
-import { findImageUrls } from "../utils/note-links";
+import { syncCustomizationForAttribution } from "../services/customization-sync.server";
 
 type AdminGraphql = {
   graphql: (
@@ -25,45 +24,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     await Promise.all(
       attributions.slice(0, 40).map(async (attr) => {
         try {
-          const response = await (admin as AdminGraphql).graphql(
-            `#graphql
-            query adminCustomNote($id: ID!) {
-              order(id: $id) {
-                id
-                name
-                note
-              }
-            }`,
-            { variables: { id: attr.shopifyOrderId } },
+          await syncCustomizationForAttribution(
+            admin as AdminGraphql,
+            {
+              id: attr.id,
+              shop: session.shop,
+              vendorId: attr.vendorId,
+              shopifyOrderId: attr.shopifyOrderId,
+              shopifyOrderName: attr.shopifyOrderName,
+              lineItemsJson: attr.lineItemsJson,
+            },
+            { notify: false },
           );
-          const json = await response.json();
-          const order = json.data?.order;
-          const note = order?.note ? String(order.note) : "";
-          const imageUrls = findImageUrls(note);
-          if (!imageUrls.length) return;
-
-          let productTitle = "Product";
-          try {
-            const items = JSON.parse(attr.lineItemsJson || "[]") as Array<{
-              title?: string;
-            }>;
-            productTitle = items[0]?.title || productTitle;
-          } catch {
-            /* ignore */
-          }
-
-          await upsertCustomizationRequest({
-            shop: session.shop,
-            vendorId: attr.vendorId,
-            attributionId: attr.id,
-            shopifyOrderId: attr.shopifyOrderId,
-            orderName: attr.shopifyOrderName || order?.name || attr.shopifyOrderId,
-            productTitle,
-            customerNote: note,
-            imageUrls,
-          });
         } catch (error) {
-          console.error("admin custom note sync failed", attr.id, error);
+          console.error("admin custom sync failed", attr.id, error);
         }
       }),
     );
@@ -139,8 +113,9 @@ export default function AdminCustomizations() {
 
         {requests.length === 0 ? (
           <div className="nx-empty">
-            No customization requests yet. They appear when a customer order
-            includes design images in the order note.
+            No customization requests yet. They appear when an order includes
+            design links in the note, checkout attributes, or line-item
+            properties.
           </div>
         ) : (
           <div className="nx-grid">

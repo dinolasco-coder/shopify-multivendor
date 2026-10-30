@@ -466,9 +466,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       } catch (notifyError) {
         console.error("notify cancel failed", notifyError);
       }
+      let customizationNote = "";
+      try {
+        const { cancelCustomizationForAttribution } = await import(
+          "../models/customization.server"
+        );
+        const n = await cancelCustomizationForAttribution(
+          attributionId,
+          vendor.id,
+        );
+        if (n > 0) {
+          customizationNote = " AI customization request cancelled too.";
+        }
+      } catch (customError) {
+        console.error("cancel customization on order cancel failed", customError);
+      }
       return {
         ok: true,
-        message,
+        message: `${message}${customizationNote}`,
         attributionId,
         cancelled: true,
       };
@@ -1146,6 +1161,16 @@ export default function VendorOrders() {
                                     boxSizing: "border-box",
                                   }}
                                 />
+                                <p
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#6d7175",
+                                    margin: "4px 0 0",
+                                  }}
+                                >
+                                  Cancelling the order also marks any linked AI
+                                  customization request as cancelled.
+                                </p>
                                 <button
                                   type="submit"
                                   className="sx-btn"

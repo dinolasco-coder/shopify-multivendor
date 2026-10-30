@@ -16,12 +16,12 @@ import {
   listMarketplaceProducts,
   updateVendorProduct,
 } from "../services/products.server";
+import { syncCustomizationForAttribution } from "../services/customization-sync.server";
 import { fromProductPathId, toProductPathId } from "../utils/product-id";
 import { formatMoney } from "../utils/money";
 import {
   listCustomizationRequestsForVendor,
   updateCustomizationRequest,
-  upsertCustomizationRequest,
 } from "../models/customization.server";
 
 type CustomDesign = {
@@ -84,62 +84,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     await Promise.all(
       attributions.slice(0, 40).map(async (attr) => {
         try {
-          const response = await admin.graphql(
-            `#graphql
-            query vendorCustomNote($id: ID!) {
-              order(id: $id) {
-                id
-                name
-                note
-              }
-            }`,
-            { variables: { id: attr.shopifyOrderId } },
-          );
-          const json = await response.json();
-          const order = json.data?.order;
-          const note = order?.note ? String(order.note) : "";
-          const imageUrls = findImageUrls(note);
-          if (!imageUrls.length) return;
-
-          let productTitle = "Product";
-          try {
-            const items = JSON.parse(attr.lineItemsJson || "[]") as Array<{
-              title?: string;
-            }>;
-            productTitle = items[0]?.title || productTitle;
-          } catch {
-            /* ignore */
-          }
-
-          const orderName =
-            attr.shopifyOrderName || order?.name || attr.shopifyOrderId;
-
-          await upsertCustomizationRequest({
+          await syncCustomizationForAttribution(admin, {
+            id: attr.id,
             shop: vendor.shop,
             vendorId: vendor.id,
-            attributionId: attr.id,
             shopifyOrderId: attr.shopifyOrderId,
-            orderName,
-            productTitle,
-            customerNote: note,
-            imageUrls,
+            shopifyOrderName: attr.shopifyOrderName,
+            lineItemsJson: attr.lineItemsJson,
           });
-
-          try {
-            const { notifyCustomization } = await import(
-              "../models/notifications.server"
-            );
-            await notifyCustomization({
-              shop: vendor.shop,
-              vendorId: vendor.id,
-              orderName,
-              attributionId: attr.id,
-            });
-          } catch (notifyError) {
-            console.error("notify customization failed", notifyError);
-          }
         } catch (error) {
-          console.error("customized note fetch failed", attr.id, error);
+          console.error("customized sync failed", attr.id, error);
         }
       }),
     );
@@ -363,8 +317,9 @@ export default function VendorAiCustomization() {
         {tab === "requests" ? (
           designs.length === 0 ? (
             <div className="sx-empty">
-              No custom design images yet. When a customer order has a design
-              link in the notes, it shows up here.
+              No custom design images yet. Designs appear when the order note,
+              checkout attributes, or line-item properties include an image link
+              (e.g. .png / .jpg or Shopify CDN file URL).
             </div>
           ) : (
             <div className="sx-cards">

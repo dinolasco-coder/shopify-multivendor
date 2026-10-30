@@ -81,3 +81,35 @@ export async function updateCustomizationRequest(
     },
   });
 }
+
+/** Mark customization cancelled when the related order is cancelled (seller scope). */
+export async function cancelCustomizationForAttribution(
+  attributionId: string,
+  vendorId: string,
+) {
+  const result = await prisma.customizationRequest.updateMany({
+    where: {
+      attributionId,
+      vendorId,
+      status: { in: ["pending", "accepted"] },
+    },
+    data: { status: "cancelled" },
+  });
+  return result.count;
+}
+
+/** Mark all customization requests on a Shopify order cancelled (admin scope). */
+export async function cancelCustomizationForShopifyOrder(
+  shop: string,
+  shopifyOrderId: string,
+) {
+  const result = await prisma.customizationRequest.updateMany({
+    where: {
+      shop,
+      shopifyOrderId,
+      status: { in: ["pending", "accepted"] },
+    },
+    data: { status: "cancelled" },
+  });
+  return result.count;
+}
