@@ -2,6 +2,9 @@ import {
   AI_CUSTOMIZATION_FEE_KEY,
   AI_CUSTOMIZATION_FEE_NAMESPACE,
   AI_CUSTOMIZATION_FEE_TYPE,
+  ORDER_CUSTOMIZATION_NAMESPACE,
+  ORDER_CUSTOMIZATION_NOTE_KEY,
+  ORDER_CUSTOMIZATION_STATUS_KEY,
   VENDOR_METAFIELD_KEY,
   VENDOR_METAFIELD_NAMESPACE,
   VENDOR_METAFIELD_NAMESPACE_APP,
@@ -54,6 +57,67 @@ export async function ensureMarketplaceMetafieldDefinition(admin: AdminGraphql) 
     console.error("metafieldDefinitionCreate errors", realErrors);
   }
   return json;
+}
+
+async function createOrderMetafieldDefinition(
+  admin: AdminGraphql,
+  definition: {
+    name: string;
+    key: string;
+    description: string;
+    type: string;
+  },
+) {
+  const response = await admin.graphql(
+    `#graphql
+    mutation CreateOrderMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+      metafieldDefinitionCreate(definition: $definition) {
+        createdDefinition { id name }
+        userErrors { field message code }
+      }
+    }`,
+    {
+      variables: {
+        definition: {
+          ...definition,
+          namespace: ORDER_CUSTOMIZATION_NAMESPACE,
+          ownerType: "ORDER",
+          access: {
+            customerAccount: "PUBLIC_READ",
+          },
+        },
+      },
+    },
+  );
+  const json = await response.json();
+  const errors = json.data?.metafieldDefinitionCreate?.userErrors ?? [];
+  const realErrors = errors.filter(
+    (e: { message?: string; code?: string }) =>
+      !String(e.message || "")
+        .toLowerCase()
+        .includes("taken") &&
+      e.code !== "TAKEN",
+  );
+  if (realErrors.length) {
+    console.error("order metafieldDefinitionCreate errors", realErrors);
+  }
+}
+
+export async function ensureOrderCustomizationMetafieldDefinitions(
+  admin: AdminGraphql,
+) {
+  await createOrderMetafieldDefinition(admin, {
+    name: "Customization status",
+    key: ORDER_CUSTOMIZATION_STATUS_KEY,
+    description: "AI customization status for customer account",
+    type: "single_line_text_field",
+  });
+  await createOrderMetafieldDefinition(admin, {
+    name: "Customization message",
+    key: ORDER_CUSTOMIZATION_NOTE_KEY,
+    description: "Message to customer about customization or cancellation",
+    type: "multi_line_text_field",
+  });
 }
 
 export function vendorMetafieldInput(vendorId: string) {

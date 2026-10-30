@@ -477,6 +477,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         if (n > 0) {
           customizationNote = " AI customization request cancelled too.";
+          const customerMessage =
+            staffNote ||
+            "This order and your AI customization request were cancelled.";
+          const { setOrderCustomizationCustomerNote } = await import(
+            "../services/customer-customization-metafield.server"
+          );
+          await setOrderCustomizationCustomerNote(
+            admin,
+            attribution.shopifyOrderId,
+            { status: "cancelled", message: customerMessage },
+          );
         }
       } catch (customError) {
         console.error("cancel customization on order cancel failed", customError);

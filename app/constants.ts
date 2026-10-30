@@ -9,6 +9,11 @@ export const AI_CUSTOMIZATION_FEE_NAMESPACE = "custom";
 export const AI_CUSTOMIZATION_FEE_KEY = "ai_customization_fee";
 export const AI_CUSTOMIZATION_FEE_TYPE = "number_decimal";
 
+/** Order metafields shown on customer account order status (via app extension). */
+export const ORDER_CUSTOMIZATION_NAMESPACE = "marketplace";
+export const ORDER_CUSTOMIZATION_STATUS_KEY = "customization_status";
+export const ORDER_CUSTOMIZATION_NOTE_KEY = "customization_customer_note";
+
 export const VENDOR_STATUSES = [
   "pending",
   "approved",

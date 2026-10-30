@@ -10,7 +10,7 @@ import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
-import { ensureMarketplaceMetafieldDefinition } from "../services/metafields.server";
+import { ensureMarketplaceMetafieldDefinition, ensureOrderCustomizationMetafieldDefinitions } from "../services/metafields.server";
 import { getOrCreateSettings } from "../models/settings.server";
 
 export const links: LinksFunction = () => [
@@ -22,6 +22,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   await getOrCreateSettings(session.shop);
   try {
     await ensureMarketplaceMetafieldDefinition(admin);
+    await ensureOrderCustomizationMetafieldDefinitions(admin);
   } catch (error) {
     console.error("Failed to ensure marketplace metafield definition", error);
   }

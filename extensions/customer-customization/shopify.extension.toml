@@ -1,0 +1,19 @@
+api_version = "2025-10"
+
+[[extensions]]
+type = "ui_extension"
+name = "Customization message"
+handle = "customer-customization"
+uid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+[[extensions.targeting]]
+module = "./src/OrderCustomization.jsx"
+target = "customer-account.order-status.block.render"
+
+[[extensions.metafields]]
+namespace = "marketplace"
+key = "customization_customer_note"
+
+[[extensions.metafields]]
+namespace = "marketplace"
+key = "customization_status"

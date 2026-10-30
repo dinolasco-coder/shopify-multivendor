@@ -545,6 +545,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           customizationNote = ` ${n} AI customization request${
             n === 1 ? "" : "s"
           } marked cancelled.`;
+          const customerMessage =
+            staffNote ||
+            "This order and your AI customization request were cancelled.";
+          const { setOrderCustomizationCustomerNote } = await import(
+            "../services/customer-customization-metafield.server"
+          );
+          await setOrderCustomizationCustomerNote(admin, orderId, {
+            status: "cancelled",
+            message: customerMessage,
+          });
         }
       } catch (customError) {
         console.error("cancel customization on admin order cancel failed", customError);

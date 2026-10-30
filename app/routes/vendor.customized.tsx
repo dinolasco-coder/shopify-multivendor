@@ -23,6 +23,7 @@ import {
   listCustomizationRequestsForVendor,
   updateCustomizationRequest,
 } from "../models/customization.server";
+import { setOrderCustomizationCustomerNote } from "../services/customer-customization-metafield.server";
 
 type CustomDesign = {
   id: string;
@@ -158,13 +159,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (intent === "cancelRequest") {
+      const cancelNote = String(form.get("cancelNote") || "").trim();
       const updated = await updateCustomizationRequest(requestId, vendor.id, {
         status: "cancelled",
+        ...(cancelNote ? { sellerNotes: cancelNote } : {}),
       });
       if (!updated) return { error: "Request not found." };
+      try {
+        const { admin } = await unauthenticated.admin(vendor.shop);
+        await setOrderCustomizationCustomerNote(admin, updated.shopifyOrderId, {
+          status: "cancelled",
+          message:
+            cancelNote ||
+            "Your AI customization request for this order was cancelled by the seller.",
+        });
+      } catch (error) {
+        console.error("customer customization cancel note failed", error);
+      }
       return {
         ok: true,
-        message: `Cancelled customization for ${updated.orderName || "order"}.`,
+        message: `Cancelled customization for ${updated.orderName || "order"}. The customer can see your note on their order in My account.`,
       };
     }
 
@@ -475,12 +489,38 @@ export default function VendorAiCustomization() {
                               Accept
                             </button>
                           </Form>
-                          <Form method="post">
+                          <Form method="post" style={{ width: "100%" }}>
                             <input type="hidden" name="requestId" value={d.id} />
                             <input
                               type="hidden"
                               name="intent"
                               value="cancelRequest"
+                            />
+                            <label
+                              htmlFor={`cancel-note-${d.id}`}
+                              style={{
+                                display: "block",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                marginBottom: 4,
+                              }}
+                            >
+                              Message to customer (optional)
+                            </label>
+                            <textarea
+                              id={`cancel-note-${d.id}`}
+                              name="cancelNote"
+                              rows={2}
+                              placeholder="Shown on their My account order page when you cancel"
+                              style={{
+                                width: "100%",
+                                boxSizing: "border-box",
+                                border: "1px solid #c9cccf",
+                                borderRadius: 8,
+                                padding: "8px 10px",
+                                fontSize: 13,
+                                marginBottom: 8,
+                              }}
                             />
                             <button
                               className="sx-btn"
@@ -502,12 +542,38 @@ export default function VendorAiCustomization() {
                         </>
                       ) : null}
                       {d.status === "accepted" ? (
-                        <Form method="post">
+                        <Form method="post" style={{ width: "100%" }}>
                           <input type="hidden" name="requestId" value={d.id} />
                           <input
                             type="hidden"
                             name="intent"
                             value="cancelRequest"
+                          />
+                          <label
+                            htmlFor={`cancel-note-acc-${d.id}`}
+                            style={{
+                              display: "block",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              marginBottom: 4,
+                            }}
+                          >
+                            Message to customer (optional)
+                          </label>
+                          <textarea
+                            id={`cancel-note-acc-${d.id}`}
+                            name="cancelNote"
+                            rows={2}
+                            placeholder="Shown on their My account order page when you cancel"
+                            style={{
+                              width: "100%",
+                              boxSizing: "border-box",
+                              border: "1px solid #c9cccf",
+                              borderRadius: 8,
+                              padding: "8px 10px",
+                              fontSize: 13,
+                              marginBottom: 8,
+                            }}
                           />
                           <button
                             className="sx-btn"
