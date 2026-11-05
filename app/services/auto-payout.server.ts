@@ -1,6 +1,9 @@
 import prisma from "../db.server";
 import { effectiveCommissionAmount } from "../utils/commission-flag";
 import {
+  assertPaymongoDestinationReady,
+} from "../utils/payout-destination";
+import {
   createBatchTransfer,
   isPaymongoAutoPayoutsEnabled,
   isPaymongoConfigured,
@@ -61,6 +64,30 @@ export async function sendPaymongoPayout(opts: {
     );
   }
 
+  const destination = assertPaymongoDestinationReady(vendor);
+
+  // Persist normalized destination so API matches what sellers save / PayMongo dashboard uses.
+  if (
+    destination.number !== vendor.payoutAccountNumber?.trim() ||
+    destination.name !== vendor.payoutAccountName?.trim() ||
+    destination.bic !== vendor.payoutBankBic?.trim()
+  ) {
+    await prisma.vendor.update({
+      where: { id: vendor.id },
+      data: {
+        payoutAccountNumber: destination.number,
+        payoutAccountName: destination.name,
+        payoutBankBic: destination.bic,
+      },
+    });
+  }
+
+  if (amount < 10) {
+    throw new Error(
+      "PayMongo InstaPay charges about ₱10 fee per transfer. Send at least ₱10 so the seller receives a meaningful amount after fees.",
+    );
+  }
+
   if (opts.attributionId) {
     const existing = await existingActivePayoutForAttribution(opts.attributionId);
     if (existing) {
@@ -93,9 +120,9 @@ export async function sendPaymongoPayout(opts: {
         description: opts.note || `Seller payout ${vendor.name}`,
         referenceNumber: reference.slice(0, 35),
         destination: {
-          number: vendor.payoutAccountNumber!.trim(),
-          name: vendor.payoutAccountName!.trim(),
-          bic: vendor.payoutBankBic!.trim(),
+          number: destination.number,
+          name: destination.name,
+          bic: destination.bic,
         },
         metadata: {
           vendor_id: vendor.id,
@@ -106,12 +133,8 @@ export async function sendPaymongoPayout(opts: {
       { idempotencyKey: payout.id },
     );
 
-    const status =
-      result.status === "succeeded" || result.status === "success"
-        ? "succeeded"
-        : result.status === "failed"
-          ? "failed"
-          : "pending";
+    // InstaPay/GCash settles asynchronously — only webhooks mark succeeded.
+    const status = result.status === "failed" ? "failed" : "pending";
 
     const updated = await prisma.vendorPayout.update({
       where: { id: payout.id },
@@ -119,6 +142,10 @@ export async function sendPaymongoPayout(opts: {
         providerBatchId: result.batchId,
         providerTransferId: result.transferId,
         status,
+        errorMessage:
+          status === "failed"
+            ? "PayMongo rejected the transfer. Check seller GCash name and number."
+            : null,
       },
     });
 

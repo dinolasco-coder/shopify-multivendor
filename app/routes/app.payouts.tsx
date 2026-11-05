@@ -162,6 +162,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         };
       }
       const vendor = await getVendorById(vendorId);
+      if (result.payout.status === "pending") {
+        return {
+          ok: true,
+          message: `PayMongo accepted the transfer (status: pending) for ${
+            vendor?.name || "seller"
+          }: ${formatMoney(result.payout.amount, result.payout.currency)}. InstaPay/GCash can still reject it in a few minutes — refresh Recent payouts, or check PayMongo dashboard. If GCash SMS says cash-in failed, fix the seller’s GCash name (exact KYC name) and 09… mobile number.`,
+        };
+      }
       return {
         ok: true,
         message: `PayMongo transfer ${result.payout.status} for ${
@@ -665,6 +673,12 @@ export default function AdminPayoutsPage() {
                       </span>
                       {p.errorMessage ? (
                         <p className="nx-secondary">{p.errorMessage}</p>
+                      ) : p.provider === "paymongo" && p.status === "pending" ? (
+                        <p className="nx-secondary">
+                          Waiting on InstaPay/GCash. If the seller got an SMS that
+                          cash-in failed, this row should show failed after refresh
+                          — fix GCash account name and number, then send again.
+                        </p>
                       ) : null}
                     </td>
                     <td>{p.reference || p.providerTransferId || "—"}</td>

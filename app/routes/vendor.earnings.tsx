@@ -16,6 +16,11 @@ import {
 } from "../constants/paymongo-institutions";
 import { formatMoney } from "../utils/money";
 import { COMMISSION_ENABLED } from "../utils/commission-flag";
+import {
+  normalizePayoutAccountName,
+  normalizePayoutAccountNumber,
+  validateGcashNumberForInstapay,
+} from "../utils/payout-destination";
 
 const PAYOUT_METHODS = [
   { value: "gcash", label: "GCash" },
@@ -73,8 +78,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const method = String(form.get("payoutMethod") || "").trim().toLowerCase();
-  const accountName = String(form.get("payoutAccountName") || "").trim();
-  const accountNumber = String(form.get("payoutAccountNumber") || "").trim();
+  let accountName = normalizePayoutAccountName(
+    String(form.get("payoutAccountName") || ""),
+  );
+  let accountNumber = normalizePayoutAccountNumber(
+    method,
+    String(form.get("payoutAccountNumber") || ""),
+  );
   let bankBic = String(form.get("payoutBankBic") || "").trim().toUpperCase();
   const notes = String(form.get("payoutNotes") || "").trim();
 
@@ -92,6 +102,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   if (method && !bankBic) {
     return { error: "Select your bank / e-wallet (required for auto-pay)." };
+  }
+  if (method === "gcash") {
+    const gcashErr = validateGcashNumberForInstapay(accountNumber);
+    if (gcashErr) {
+      return { error: gcashErr };
+    }
   }
 
   await updateVendor(result.vendor.id, {
@@ -281,10 +297,14 @@ export default function VendorEarnings() {
                 id="vendor-payout-name"
                 name="payoutAccountName"
                 defaultValue={payout.accountName}
-                placeholder="Full name on account"
+                placeholder="Exact name from GCash Profile (legal name)"
                 style={fieldStyle}
                 required
               />
+              <p style={{ margin: "6px 0 0", fontSize: 12, color: "#6d7175" }}>
+                For GCash, copy your name from the GCash app Profile — middle
+                names must match or InstaPay will reject the transfer.
+              </p>
             </div>
             <div>
               <label htmlFor="vendor-payout-number" style={labelStyle}>

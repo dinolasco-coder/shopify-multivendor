@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { applyPaymongoTransferStatus } from "../services/auto-payout.server";
+import { parsePaymongoTransferCallback } from "../utils/paymongo-webhook-payload";
 
 /**
  * PayMongo transfer status callback (public; no Shopify session).
@@ -17,42 +18,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const data = body as {
-    data?: {
-      id?: string;
-      type?: string;
-      attributes?: {
-        status?: string;
-        failure_code?: string | null;
-        failure_message?: string | null;
-      };
-      status?: string;
-    };
-    id?: string;
-    status?: string;
-    failure_message?: string | null;
-  };
+  const { transferId, status, failureMessage } =
+    parsePaymongoTransferCallback(body);
 
-  const transferId =
-    data.data?.id ||
-    data.id ||
-    null;
-  const status =
-    data.data?.attributes?.status ||
-    data.data?.status ||
-    data.status ||
-    null;
-  const failureMessage =
-    data.data?.attributes?.failure_message ||
-    data.data?.attributes?.failure_code ||
-    data.failure_message ||
-    null;
+  if (!transferId) {
+    console.warn("PayMongo webhook: no transfer id in payload", body);
+  }
 
   try {
     await applyPaymongoTransferStatus({
       transferId,
       status,
-      failureMessage: failureMessage ? String(failureMessage) : null,
+      failureMessage,
     });
   } catch (error) {
     console.error("PayMongo webhook handler failed", error);
